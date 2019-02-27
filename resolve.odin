@@ -17,9 +17,6 @@ resolve_identifiers :: proc(ws: ^Workspace) -> bool {
 }
 
 try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
-	if ident.name == "vector_proc" {
-		k := 42;
-	}
 	block := ident.base.parent;
 	for block != nil {
 		defer block = block.base.parent;
