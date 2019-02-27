@@ -24,9 +24,10 @@ Type_Slice :: struct {
 	slice_of: ^Type,
 }
 
-Type_Union :: struct {
-	types: [dynamic]^Type,
-}
+// @UnionTypes
+// Type_Union :: struct {
+// 	types: [dynamic]^Type,
+// }
 
 Field :: struct {
 	name: string,
@@ -50,7 +51,10 @@ Type :: struct {
 		Type_Array,
 		Type_Dynamic_Array,
 		Type_Slice,
-		Type_Union,
+
+		// @UnionTypes
+		// Type_Union,
+
 		Type_Proc,
 	},
 	size: uint,
@@ -584,13 +588,14 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	if wanted == type_float && given == type_untyped_float do return true;
 
 	//
-	if union_type, ok := wanted.kind.(Type_Union); ok {
-		for kind in union_type.types {
-			if given == kind do return true;
-		}
+	// @UnionTypes
+	// if union_type, ok := wanted.kind.(Type_Union); ok {
+	// 	for kind in union_type.types {
+	// 		if given == kind do return true;
+	// 	}
 
-		return false;
-	}
+	// 	return false;
+	// }
 
 	return false;
 }
@@ -650,6 +655,29 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 	new_type := make_type(POINTER_SIZE, Type_Proc{params, declaration.return_type});
 	append(&all_types, new_type);
 	return new_type;
+}
+
+get_base_type :: proc(type: ^Type) -> ^Type {
+	switch kind in type.kind {
+		case Type_Dynamic_Array: {
+			return kind.array_of;
+		}
+		case Type_Array: {
+			return kind.array_of;
+		}
+		case Type_Slice: {
+			return kind.slice_of;
+		}
+		case Type_Ptr: {
+			return kind.ptr_to;
+		}
+		case: {
+			unhandledcase(kind);
+		}
+	}
+
+	unreachable();
+	return nil;
 }
 
 get_or_make_type_ptr_to :: proc(using ws: ^Workspace, ptr_to: ^Type) -> ^Type {
@@ -746,29 +774,6 @@ error :: inline proc(base: ^Ast_Node, args: ..any) {
 
 
 
-get_base_type :: proc(type: ^Type) -> ^Type {
-	switch kind in type.kind {
-		case Type_Dynamic_Array: {
-			return kind.array_of;
-		}
-		case Type_Array: {
-			return kind.array_of;
-		}
-		case Type_Slice: {
-			return kind.slice_of;
-		}
-		case Type_Ptr: {
-			return kind.ptr_to;
-		}
-		case: {
-			unhandledcase(kind);
-		}
-	}
-
-	unreachable();
-	return nil;
-}
-
 make_type :: inline proc(size: uint, derived: $T, loc := #caller_location) -> ^Type {
 	new_type := new(Type);
 	new_type.size = size;
@@ -812,18 +817,21 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 			}
 			return strings.to_string(buf);
 		}
-		case Type_Union: {
-			buf: strings.Builder;
-			sbprint(&buf, "union {");
-			comma := "";
-			for canonical_type in kind.types {
-				sbprint(&buf, comma, type_to_string(canonical_type));
-				comma = ", ";
-			}
 
-			sbprint(&buf, "}");
-			return strings.to_string(buf);
-		}
+		// @UnionTypes
+		// case Type_Union: {
+		// 	buf: strings.Builder;
+		// 	sbprint(&buf, "union {");
+		// 	comma := "";
+		// 	for canonical_type in kind.types {
+		// 		sbprint(&buf, comma, type_to_string(canonical_type));
+		// 		comma = ", ";
+		// 	}
+
+		// 	sbprint(&buf, "}");
+		// 	return strings.to_string(buf);
+		// }
+
 		case: {
 			unhandledcase(kind);
 		}

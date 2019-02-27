@@ -47,18 +47,19 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 			assert(kind.ptr_to != canonical_type);
 			return aprint("^", type_to_odin_string(kind.ptr_to));
 		}
-		case Type_Union: {
-			buf: strings.Builder;
-			sbprint(&buf, "union {");
-			comma := "";
-			for canonical_type in kind.types {
-				sbprint(&buf, comma, type_to_odin_string(canonical_type));
-				comma = ", ";
-			}
+		// @UnionTypes
+		// case Type_Union: {
+		// 	buf: strings.Builder;
+		// 	sbprint(&buf, "union {");
+		// 	comma := "";
+		// 	for canonical_type in kind.types {
+		// 		sbprint(&buf, comma, type_to_odin_string(canonical_type));
+		// 		comma = ", ";
+		// 	}
 
-			sbprint(&buf, "}");
-			return strings.to_string(buf);
-		}
+		// 	sbprint(&buf, "}");
+		// 	return strings.to_string(buf);
+		// }
 		case: {
 			logln("Unhandled case in type_to_odin_string(): ", kind);
 			return "";
