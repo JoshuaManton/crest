@@ -63,9 +63,8 @@ Depend_Entry :: struct {
 
 Check_State :: enum {
 	Unchecked,
-	Checking,
+	// Checking,
 	Checked,
-	Error,
 }
 
 POINTER_SIZE :: 8;
@@ -96,10 +95,41 @@ typecheck_workspace :: proc(ws: ^Workspace) -> bool {
 		return false;
 	}
 
-	all_done := false;
-	checked_this_iteration := true;
+	for len(ws.nodes_to_typecheck) > 0 {
+		checked_this_iteration := false;
 
-	for !all_done {
+		check_loop:
+		for idx := len(ws.nodes_to_typecheck)-1; idx >= 0; idx -= 1 {
+			node := ws.nodes_to_typecheck[idx];
+
+			assert(node.inferred_type == nil);
+			assert(node.check_state == Unchecked);
+
+			for dependency in node.depends {
+				if dependency.check_state != Checked {
+					continue check_loop;
+				}
+			}
+
+			check_result := typecheck_one_node(ws, node);
+			#complete
+			switch check_result {
+				case Check_Result.Ok: {
+					unordered_remove(&ws.nodes_to_typecheck, idx);
+					checked_this_iteration = true;
+				}
+				case Check_Result.Not_Checked: {
+					// no probs, we'll try again later
+				}
+				case Check_Result.Error: {
+					return false;
+				}
+				case: {
+					unhandledcase(check_result);
+				}
+			}
+		}
+
 		if !checked_this_iteration {
 			logln("Made no progress, writing dependency graph to dependencies.txt...");
 			sb: strings.Builder;
@@ -119,45 +149,8 @@ typecheck_workspace :: proc(ws: ^Workspace) -> bool {
 			os.write_entire_file("dependencies.txt", cast([]u8)strings.to_string(sb)[:]);
 			return false;
 		}
-
-		all_done = true;
-
-		checked_this_iteration = false;
-
-		check_loop:
-		for idx := len(ws.nodes_to_typecheck)-1; idx >= 0; idx -= 1 {
-			node := ws.nodes_to_typecheck[idx];
-
-			if node.inferred_type != nil do assert(node.check_state == Checked);
-			if node.check_state == Checked do continue;
-
-			for dependency in node.depends {
-				if dependency.check_state != Checked {
-					continue check_loop;
-				}
-			}
-
-			all_done = false;
-			check_result := typecheck_one_node(ws, node);
-			#complete
-			switch check_result {
-				case Check_Result.Ok: {
-					unordered_remove(&ws.nodes_to_typecheck, idx);
-					checked_this_iteration = true;
-				}
-				case Check_Result.Not_Checked: {
-					// no probs, we'll try again later
-				}
-				case Check_Result.Error: {
-					return false;
-				}
-				case: {
-					unhandledcase(check_result);
-				}
-			}
-		}
 	}
-	assert(all_done);
+
 	return true;
 }
 
@@ -167,8 +160,6 @@ Check_Result :: enum {
 	Error,
 }
 typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Result {
-	using Check_State;
-
 	switch kind in &node.derived {
 		case Ast_Number: {
 			t: ^Type;
@@ -200,7 +191,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					ptr, ok := t.kind.(Type_Ptr);
 					if !ok {
 						error(node, "Cannot dereference a non-pointer type, given ", type_to_string(t));
-						assert(false);
+						return Check_Result.Error;
 					}
 
 					t = ptr.ptr_to;
@@ -290,13 +281,13 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Directive: {
 			if kind.directive == "#odin" {
-				node.check_state = Checked;
+				node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 			}
 		}
 
 		case Ast_Block: {
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
@@ -439,19 +430,19 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_If: {
 			ensure_is_assignable_to(type_bool, kind.condition);
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
 		case Ast_Else_If: {
 			ensure_is_assignable_to(type_bool, kind.condition);
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
 		case Ast_While: {
 			ensure_is_assignable_to(type_bool, kind.condition);
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
@@ -466,14 +457,14 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			assert(kind.left.inferred_type != nil);
 			left := kind.left.inferred_type;
 			ensure_is_assignable_to(left, kind.right);
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
 		case Ast_Return: {
 			assert(kind.procedure.inferred_type != nil);
 			ensure_is_assignable_to(kind.procedure.inferred_type.kind.(Type_Proc).return_type, kind.expr);
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
@@ -551,12 +542,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// }
 
 		case Ast_Comment: {
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
 		case Ast_Directive_Include: {
-			node.check_state = Checked;
+			node.check_state = Check_State.Checked;
 			return Check_Result.Ok;
 		}
 
