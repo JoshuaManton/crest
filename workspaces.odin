@@ -35,7 +35,7 @@ add_file_to_workspace :: inline proc(ws: ^Workspace, filename: string) {
 compile :: inline proc(ws: ^Workspace) {
 	ok := parse_workspace(ws, "\"<FILENAME>\"", cast(string)ws.program_text[:]);
 	if !ok {
-		logln("There were errors. Exiting.");
+		logln("There were errors, exiting.");
 		return;
 	}
 

@@ -1,7 +1,6 @@
 #include "demo_other.cr"
 
 proc println(str: string) #odin;
-proc println(str: float) #odin;
 
 proc main() {
 	basic_stuff();
@@ -10,10 +9,14 @@ proc main() {
 
 proc basic_stuff() {
 	//
-	proc foo(var value: float, var x: int) float {
-		return value * 2;
+	{
+		proc println(str: float) #odin;
+		proc foo(var value: float, var x: int) float {
+			return value * 2;
+		}
+		println(foo(foo(1, 2), 2));
 	}
-	println(foo(foo(1, 2), 2));
+
 
 	//
 	var some_ptr: ^int;

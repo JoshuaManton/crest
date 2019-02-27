@@ -361,7 +361,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 			if program_text[lex_idx+1] == '/' {
 				token_type = Comment;
 				start := lex_idx;
-				for program_text[lex_idx+1] != '\n' && program_text[lex_idx+1] != '\x00' {
+				for program_text[lex_idx] != '\n' && program_text[lex_idx] != '\x00' {
 					inc();
 				}
 

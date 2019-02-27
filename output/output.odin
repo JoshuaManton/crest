@@ -2,47 +2,48 @@ package output
 
 using import "core:fmt"
 
-			slice_proc :: proc(slice: []f32) {
-		// for x: float in slice {
-		// 	println(x);
-		// }
+	some_included_proc :: proc() {
+		println("I am in an included file!");
 	}
 
-	list_proc :: proc(list: [dynamic]f32) {
-		s: string = "hello";
-		s2: string;
-		s2 = s;
-		i: int = 0;
-		for i < 10 {
-			i += 1;
-			println(i);
+		main :: proc() {
+		basic_stuff();
+		includes();
+	}
+
+	basic_stuff :: proc() {
+		//
+		{
+						foo :: proc(value: f32, x: int) -> f32 {
+				return value * 2;
+			}
+
+			println(foo(foo(1, 2), 2));
+		}
+		//
+		some_ptr: ^int;
+		some_int: int = 4;
+		some_ptr = &some_int;
+		//
+		Vector2 :: struct {
+			x: f32,
+			y: f32,
+		}
+
+		i: int = 10;
+		for i > 0 {
+			vector_proc :: proc(v: Vector2) -> f32 {
+				return v.x * 3.140;
+			}
+
+			i -= 1;
+			vec: Vector2;
+			vec.x = cast(f32)i;
+			vec.y = vector_proc(vec);
 		}
 	}
 
-	Foo :: struct {
-		x: int,
-		z: bool,
-	}
-
-	Bar :: struct {
-		foo: Foo,
-		y: f32,
-	}
-
-	array_proc :: proc(array: [80]f32) {
-	}
-
-	main :: proc() {
-		slice: []f32;
-		list: [dynamic]f32;
-		array: [80]f32;
-		slice_proc(slice);
-		list_proc(list);
-		array_proc(array);
-		append(&list, 1);
-		append(&list, 2);
-		append(&list, 3);
-		// slice_proc(list[..]);
-		// slice_proc(array[..]);
+	includes :: proc() {
+		some_included_proc();
 	}
 

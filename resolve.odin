@@ -5,8 +5,8 @@ Symbol :: struct {
 	inferred_type: ^Type,
 }
 
-resolve_identifiers :: proc() -> bool {
-	for ident in current_workspace.unresolved_identifiers {
+resolve_identifiers :: proc(ws: ^Workspace) -> bool {
+	for ident in ws.unresolved_identifiers {
 		resolved := try_resolve_identifier(ident);
 		if !resolved {
 			unresolved_identifier(ident.base, ident.name);
@@ -38,10 +38,10 @@ create_symbol :: proc(block: ^Ast_Block, name: string, inferred_type : ^Type = n
 	return decl;
 }
 
-queue_identifier_for_resolving :: proc(ident: ^Ast_Identifier) {
+queue_identifier_for_resolving :: proc(ws: ^Workspace, ident: ^Ast_Identifier) {
 	resolved := try_resolve_identifier(ident);
 	if !resolved {
-		append(&current_workspace.unresolved_identifiers, ident);
+		append(&ws.unresolved_identifiers, ident);
 	}
 }
 

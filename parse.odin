@@ -263,16 +263,17 @@ Site :: struct {
 
 PROC_IS_ODIN_PROC : u32 : 1 << 0;
 
-current_workspace: ^Workspace;
+@private
+current_parsing_workspace: ^Workspace;
 
 parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #caller_location) -> bool {
 	assert(len(text) > 0);
 	assert(workspace != nil);
 
 	// Push new workspace
-	old_workspace := current_workspace;
-	current_workspace = workspace;
-	defer current_workspace = old_workspace;
+	old_workspace := current_parsing_workspace;
+	current_parsing_workspace = workspace;
+	defer current_parsing_workspace = old_workspace;
 
 	old_block := current_block;
 	block := node(Token{}, Ast_Block{{}, nil, nil});
@@ -286,17 +287,11 @@ parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #c
 
 	workspace.syntax_tree = block;
 
-	init_builtin_types(workspace);
-
-	if !resolve_identifiers() {
+	ok := typecheck_workspace(workspace);
+	if !ok {
 		return false;
 	}
 
-	if !typecheck_workspace(workspace) {
-		return false;
-	}
-
-	// gen_odin(workspace);
 	return true;
 }
 
@@ -359,7 +354,7 @@ _alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -
 
 node :: inline proc(token: Token, derived: $T, loc := #caller_location) -> ^T {
 	ptr := _alloc_node(token, derived);
-	append(&current_workspace.nodes_to_typecheck, ptr.base);
+	append(&current_parsing_workspace.nodes_to_typecheck, ptr.base);
 	return ptr;
 }
 
@@ -367,7 +362,7 @@ depend :: inline proc(node: ^$T, depends_on: ^$S, loc := #caller_location) {
 	assert(node != nil, tprint("node was nil at ", pretty_location(loc)));
 	assert(depends_on != nil, tprint("depends_on was nil at ", pretty_location(loc)));
 	append(&node.depends, depends_on);
-	append(&current_workspace.all_depends, Depend_Entry{node, depends_on});
+	append(&current_parsing_workspace.all_depends, Depend_Entry{node, depends_on});
 }
 
 unexpected_token :: proc(token: Token, loc: rt.Source_Code_Location, expected: ..Token_Type) {
@@ -478,7 +473,7 @@ parse_typespec :: proc() -> ^Ast_Node {
 	if is_ident_or_type_keyword(token.kind) {
 		token = next_token();
 		symbol := node(token, Ast_Identifier{{}, token.text, nil});
-		queue_identifier_for_resolving(symbol);
+		queue_identifier_for_resolving(current_parsing_workspace, symbol);
 		return symbol.base;
 	}
 
@@ -590,7 +585,7 @@ parse_operand :: proc() -> ^Ast_Node {
 		case Ident: {
 			ident := token.text;
 			sym := node(token, Ast_Identifier{{}, token.text, nil});
-			queue_identifier_for_resolving(sym);
+			queue_identifier_for_resolving(current_parsing_workspace, sym);
 			return sym.base;
 		}
 		case: {
@@ -931,9 +926,12 @@ parse_proc_decl :: proc() -> ^Ast_Proc {
 	if return_type != nil {
 		depend(procedure_stmt, return_type);
 	}
-	if block != nil {
-		depend(procedure_stmt, block);
-	}
+
+	// note(josh): I don't think we need to depend on proc bodies
+	// if block != nil {
+	// 	depend(procedure_stmt, block);
+	// }
+
 	// todo: factor into loop above
 	for p in params {
 		depend(procedure_stmt, p);

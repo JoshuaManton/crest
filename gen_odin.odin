@@ -45,8 +45,6 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 		}
 		case Type_Ptr: {
 			assert(kind.ptr_to != canonical_type);
-			logln(canonical_type, "           ", kind.ptr_to);
-
 			return aprint("^", type_to_odin_string(kind.ptr_to));
 		}
 		case Type_Union: {
