@@ -9,7 +9,7 @@ resolve_identifiers :: proc(ws: ^Workspace) -> bool {
 	for ident in ws.unresolved_identifiers {
 		resolved := try_resolve_identifier(ident);
 		if !resolved {
-			unresolved_identifier(ident.base, ident.name);
+			error(ident.base, "Unresolved identifier: ", ident.name);
 			return false;
 		}
 	}
