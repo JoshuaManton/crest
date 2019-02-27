@@ -17,7 +17,10 @@ resolve_identifiers :: proc(ws: ^Workspace) -> bool {
 }
 
 try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
-	block := current_block;
+	if ident.name == "vector_proc" {
+		k := 42;
+	}
+	block := ident.base.parent;
 	for block != nil {
 		defer block = block.base.parent;
 
@@ -32,9 +35,9 @@ try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
 }
 
 create_symbol :: proc(block: ^Ast_Block, name: string, inferred_type : ^Type = nil, loc := #caller_location) -> ^Symbol {
-	assert(current_block != nil);
+	assert(block != nil);
 	decl := new_clone(Symbol{name, inferred_type});
-	append(&current_block.symbols, decl);
+	append(&block.symbols, decl);
 	return decl;
 }
 

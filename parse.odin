@@ -266,6 +266,9 @@ PROC_IS_ODIN_PROC : u32 : 1 << 0;
 @private
 current_parsing_workspace: ^Workspace;
 
+@private
+current_parsing_block: ^Ast_Block;
+
 parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #caller_location) -> bool {
 	assert(len(text) > 0);
 	assert(workspace != nil);
@@ -275,10 +278,10 @@ parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #c
 	current_parsing_workspace = workspace;
 	defer current_parsing_workspace = old_workspace;
 
-	old_block := current_block;
+	old_block := current_parsing_block;
 	block := node(Token{}, Ast_Block{{}, nil, nil});
-	current_block = block;
-	defer current_block = old_block;
+	current_parsing_block = block;
+	defer current_parsing_block = old_block;
 
 	block.stmts = parse_text_to_stmt_list(filename, text);
 	for s in block.stmts {
@@ -342,7 +345,7 @@ _alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -
 		derived,
 		last_serial,
 		token.site,
-		current_block,
+		current_parsing_block,
 		token,
 		Check_State.Unchecked,
 		nil,
@@ -803,7 +806,7 @@ parse_var_decl :: proc(require_var := true, only_name := false) -> ^Ast_Var {
 
 	name := name_token.text;
 
-	decl := create_symbol(current_block, name, nil);
+	decl := create_symbol(current_parsing_block, name, nil);
 
 	typespec: ^Ast_Node;
 	value: ^Ast_Node;
@@ -914,7 +917,7 @@ parse_proc_decl :: proc() -> ^Ast_Proc {
 		expect(Semicolon);
 	}
 
-	decl := create_symbol(current_block, name, nil);
+	decl := create_symbol(current_parsing_block, name, nil);
 
 	procedure_stmt.name = name;
 	procedure_stmt.params = params;
@@ -955,7 +958,7 @@ parse_struct_decl :: proc() -> ^Ast_Struct {
 		append(&fields, field);
 	}
 
-	decl := create_symbol(current_block, name_token.text, nil);
+	decl := create_symbol(current_parsing_block, name_token.text, nil);
 	s := node(struct_token, Ast_Struct{{}, name_token.text, fields, decl});
 
 	depend(s, block);
@@ -1186,26 +1189,24 @@ parse_stmt :: proc() -> ^Ast_Node {
 	return nil;
 }
 
-current_block: ^Ast_Block;
-
 parse_block :: proc(loc := #caller_location) -> ^Ast_Block {
 	using Token_Type;
 
-	old_current_block := current_block;
+	old_current_block := current_parsing_block;
 	curly := expect(Left_Curly);
-	current_block = node(curly, Ast_Block{{}, nil, nil});
+	current_parsing_block = node(curly, Ast_Block{{}, nil, nil});
 
-	assert(current_block != nil);
+	assert(current_parsing_block != nil);
 
 	stmts := parse_stmt_list();
 	for stmt in stmts {
-		append(&current_block.stmts, stmt);
-		depend(current_block, stmt);
+		append(&current_parsing_block.stmts, stmt);
+		depend(current_parsing_block, stmt);
 	}
 
 	expect(Right_Curly);
-	new_block := current_block;
-	current_block = old_current_block;
+	new_block := current_parsing_block;
+	current_parsing_block = old_current_block;
 
 	return new_block;
 }

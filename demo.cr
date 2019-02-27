@@ -1,22 +1,15 @@
 #include "demo_other.cr"
 
-proc println(str: string) #odin;
-
 proc main() {
 	basic_stuff();
 	includes();
 }
 
 proc basic_stuff() {
-	//
-	{
-		proc println(str: float) #odin;
-		proc foo(var value: float, var x: int) float {
-			return value * 2;
-		}
-		println(foo(foo(1, 2), 2));
+	proc sqr(var value: float) float {
+		return value * value;
 	}
-
+	print_float(sqr(3) * sqr(5));
 
 	//
 	var some_ptr: ^int;
@@ -24,24 +17,38 @@ proc basic_stuff() {
 	some_ptr = &some_int;
 
 	//
-	struct Vector2 {
-		var x: float;
-		var y: float;
-	}
 	var i = 10;
 	while i > 0 {
-		proc vector_proc(var v: Vector2) float {
-			return v.x * 3.14;
-		}
-
 		i -= 1;
-
-		var vec: Vector2;
-		vec.x = cast(float)i;
-		vec.y = vector_proc(vec);
 	}
+
+	var vec: Vector2;
+	vec.x = cast(float)i;
+	vec.y = vector_proc(vec);
 }
+
 
 proc includes() {
 	some_included_proc();
+}
+
+
+
+struct Vector2 {
+	var x: float;
+	var y: float;
+}
+
+proc vector_proc(var v: Vector2) float {
+	return v.x * 3.14;
+}
+
+proc print_string(var str: string) {
+	proc println(str: float) #odin;
+	println(str);
+}
+
+proc print_float(var f: float) {
+	proc println(f: float) #odin;
+	println(f);
 }
