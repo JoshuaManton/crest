@@ -1,0 +1,9 @@
+digraph Dependencies {
+"Ast_Block Unchecked (0:0)" -> "Ast_Proc Unchecked demo_slices.cr(4:1)"
+"Ast_Block Unchecked (0:0)" -> "Ast_Proc Unchecked demo_slices.cr(36:1)"
+"Ast_Proc Unchecked demo_slices.cr(4:1)" -> "Ast_Block Unchecked demo_slices.cr(4:33)"
+"Ast_Block Unchecked demo_slices.cr(4:33)" -> "Ast_For_Each Unchecked demo_slices.cr(5:5)"
+"Ast_Call Unchecked demo_slices.cr(41:5)" -> "Ast_Identifier Unchecked demo_slices.cr(41:5)"
+"Ast_Block Unchecked demo_slices.cr(36:13)" -> "Ast_Call Unchecked demo_slices.cr(41:5)"
+"Ast_Proc Unchecked demo_slices.cr(36:1)" -> "Ast_Block Unchecked demo_slices.cr(36:13)"
+}

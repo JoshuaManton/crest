@@ -1,0 +1,789 @@
+package crest
+
+using import "core:fmt"
+	  import "core:os"
+	  import "core:strings"
+
+using import "shared:workbench/reflection"
+using import "shared:workbench/logging"
+
+Type_Ptr :: struct {
+	ptr_to: ^Type,
+}
+
+Type_Array :: struct {
+	length: uint,
+	array_of: ^Type,
+}
+
+Type_Dynamic_Array :: struct {
+	array_of: ^Type,
+}
+
+Type_Slice :: struct {
+	slice_of: ^Type,
+}
+
+Type_Union :: struct {
+	types: [dynamic]^Type,
+}
+
+Field :: struct {
+	name: string,
+	inferred_type: ^Type,
+}
+
+Type_Proc :: struct {
+	params: [dynamic]Field,
+	return_type: ^Type,
+}
+
+Type_Struct :: struct {
+	name: string,
+	fields: [dynamic]Field,
+}
+
+Type :: struct {
+	kind: union {
+		Type_Struct,
+		Type_Ptr,
+		Type_Array,
+		Type_Dynamic_Array,
+		Type_Slice,
+		Type_Union,
+		Type_Proc,
+	},
+	size: uint,
+}
+
+Depend_Entry :: struct {
+	node: ^Ast_Node,
+	depends_on: ^Ast_Node,
+}
+
+Check_State :: enum {
+	Unchecked,
+	Checking,
+	Checked,
+}
+
+POINTER_SIZE :: 8;
+DYNAMIC_ARRAY_SIZE :: 24;
+SLICE_SIZE :: 16;
+
+type_int           := new_type(Type{Type_Struct{"int", nil}, 8});
+type_untyped_int   := new_type(Type{Type_Struct{"untyped_int", nil}, 8});
+type_untyped_float := new_type(Type{Type_Struct{"untyped_float", nil}, 8});
+type_float         := new_type(Type{Type_Struct{"float", nil}, 8});
+type_bool          := new_type(Type{Type_Struct{"bool", nil}, 1});
+type_string        := new_type(Type{Type_Struct{"string", nil}, 16});
+
+new_type :: inline proc(t: Type) -> ^Type {
+	return new_clone(t);
+}
+
+init_builtin_types :: proc(ws: ^Workspace) {
+	create_symbol(ws.syntax_tree, "int", type_int);
+	create_symbol(ws.syntax_tree, "float", type_float);
+	create_symbol(ws.syntax_tree, "bool", type_bool);
+	create_symbol(ws.syntax_tree, "string", type_string);
+}
+
+typecheck_workspace :: proc(ws: ^Workspace) -> bool {
+	using Check_State;
+
+	all_done := false;
+	checked_this_iteration := true;
+
+	for !all_done {
+		if !checked_this_iteration {
+			logln("Made no progress");
+			sb: strings.Builder;
+			sbprint(&sb, "digraph Dependencies {\n");
+
+			for node in ws.nodes_to_typecheck {
+				for depend in node.depends {
+					if depend.check_state == Checked do continue;
+
+					sbprint(&sb, "\"", get_union_type_info(node.derived),   " ", node.check_state,   " ", site(node.site), "\"");
+					sbprint(&sb, " -> ", );
+					sbprint(&sb, "\"", get_union_type_info(depend.derived), " ", depend.check_state, " ", site(depend.site), "\"", "\n");
+				}
+			}
+
+			sbprint(&sb, "}\n");
+			os.write_entire_file("dependencies.txt", cast([]u8)strings.to_string(sb)[:]);
+			return false;
+		}
+
+		all_done = true;
+
+		checked_this_iteration = false;
+
+		check_loop:
+		for idx := len(ws.nodes_to_typecheck)-1; idx >= 0; idx -= 1 {
+			node := ws.nodes_to_typecheck[idx];
+
+			if node.inferred_type != nil do assert(node.check_state == Checked);
+			if node.check_state == Checked do continue;
+
+			for dependency in node.depends {
+				if dependency.check_state != Checked {
+					continue check_loop;
+				}
+			}
+
+			all_done = false;
+			checked := typecheck_one_node(ws, node);
+			if checked {
+				unordered_remove(&ws.nodes_to_typecheck, idx);
+				checked_this_iteration = true;
+			}
+		}
+	}
+	assert(all_done);
+	return true;
+}
+
+issued_error: bool;
+error :: inline proc(base: ^Ast_Node, args: ..any) {
+	issued_error = true;
+	print(site(base.site), " ");
+	print(..args);
+	print("\n");
+}
+
+make_type :: inline proc(size: uint, derived: $T, loc := #caller_location) -> ^Type {
+	new_type := new(Type);
+	new_type.size = size;
+	new_type.kind = derived;
+
+	return new_type;
+}
+
+type_to_string :: proc(canonical_type: ^Type) -> string {
+	if canonical_type == nil do return "<nil>";
+
+	#complete
+	switch kind in canonical_type.kind {
+		case Type_Struct: {
+			return kind.name;
+		}
+		case Type_Dynamic_Array: {
+			return aprint("[:]", type_to_string(kind.array_of));
+		}
+		case Type_Array: {
+			return aprint("[", kind.length, "]", type_to_string(kind.array_of));
+		}
+		case Type_Slice: {
+			return aprint("[]", type_to_string(kind.slice_of));
+		}
+		case Type_Ptr: {
+			return aprint("^", type_to_string(kind.ptr_to));
+		}
+		case Type_Proc: {
+			buf: strings.Builder;
+			sbprint(&buf, "proc(");
+			comma := "";
+			for param in kind.params {
+				assert(param.inferred_type != nil);
+				sbprint(&buf, comma, type_to_string(param.inferred_type));
+				comma = ", ";
+			}
+			sbprint(&buf, ")");
+			if kind.return_type != nil {
+				sbprint(&buf, " ", type_to_string(kind.return_type));
+			}
+			return strings.to_string(buf);
+		}
+		case Type_Union: {
+			buf: strings.Builder;
+			sbprint(&buf, "union {");
+			comma := "";
+			for canonical_type in kind.types {
+				sbprint(&buf, comma, type_to_string(canonical_type));
+				comma = ", ";
+			}
+
+			sbprint(&buf, "}");
+			return strings.to_string(buf);
+		}
+		case: {
+			unhandledcase(kind);
+		}
+	}
+
+	assert(false);
+	return "";
+}
+
+ensure_types_match :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) {
+	if !types_match_type(wanted, given.inferred_type, loc) {
+		error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.inferred_type));
+		assert(false);
+	}
+}
+
+types_match_type :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
+	if wanted == nil && given != nil do return false;
+	if wanted != nil && given == nil do return false;
+
+	if wanted == given do return true;
+
+	if given == type_untyped_int {
+		if wanted == type_float || wanted == type_int do return true;
+		return false;
+	}
+
+	if union_type, ok := wanted.kind.(Type_Union); ok {
+		for kind in union_type.types {
+			if given == kind do return true;
+		}
+
+		return false;
+	}
+
+	return false;
+}
+
+proc_types_match :: proc(a, b: ^Type_Proc) -> bool {
+	assert(false);
+	return false;
+}
+
+get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^Type {
+	if all_types != nil {
+		type_loop:
+		for canonical_type in all_types {
+			other_type, ok := canonical_type.kind.(Type_Proc);
+			if !ok do continue;
+			if len(other_type.params) != len(declaration.params) do continue;
+			if !types_match_type(other_type.return_type, declaration.return_type) do continue;
+
+			for _, idx in other_type.params {
+				other_param_type :=  other_type.params[idx].inferred_type;
+				this_param_type  := declaration.params[idx].base.inferred_type;
+				if other_param_type != this_param_type {
+					continue type_loop;
+				}
+			}
+
+			return canonical_type;
+		}
+	}
+
+	params: [dynamic]Field;
+	for _, idx in declaration.params {
+		param := declaration.params[idx];
+		t := (param).inferred_type;
+		append(&params, Field{param.name, t});
+	}
+
+	new_type := make_type(POINTER_SIZE, Type_Proc{params, declaration.return_type});
+	append(&all_types, new_type);
+	return new_type;
+}
+
+make_struct_type :: proc(using ws: ^Workspace, declaration: ^Ast_Struct, size_override : uint = 0) -> ^Type {
+	size : uint = 0;
+	fields: [dynamic]Field;
+	if size_override > 0 {
+		size = size_override;
+	}
+	else {
+		for _, idx in declaration.fields {
+			var := declaration.fields[idx];
+			var_node := var;
+			assert(var_node.inferred_type != nil);
+			append(&fields, Field{var.name, var_node.inferred_type});
+			size += var_node.inferred_type.size;
+		}
+	}
+
+	assert(size != 0, aprintln(declaration^));
+	new_type := make_type(size, Type_Struct{declaration.name, fields});
+	append(&all_types, new_type);
+	return new_type;
+}
+
+unresolved_identifier :: proc(base: ^Ast_Node, name: string) {
+	error(base, "Unresolved identifier: ", name);
+}
+
+get_or_make_type_ptr_to :: proc(using ws: ^Workspace, ptr_to: ^Type) -> ^Type {
+	if all_types != nil {
+		for canonical_type in all_types {
+			if ptr, ok := canonical_type.kind.(Type_Ptr); ok {
+				if types_match_type(ptr.ptr_to, ptr_to) {
+					return canonical_type;
+				}
+			}
+		}
+	}
+
+	type_ptr := make_type(POINTER_SIZE, Type_Ptr{ptr_to});
+	append(&all_types, type_ptr);
+	return type_ptr;
+}
+
+get_or_make_type_dynamic_array_of :: proc(using ws: ^Workspace, array_of: ^Type) -> ^Type {
+	if all_types != nil {
+		for other_type in all_types {
+			if other_array, ok := other_type.kind.(Type_Dynamic_Array); ok {
+				if types_match_type(array_of, other_array.array_of) {
+					return other_type;
+				}
+			}
+		}
+	}
+
+	array_type := make_type(DYNAMIC_ARRAY_SIZE, Type_Dynamic_Array{array_of});
+	append(&all_types, array_type);
+	return array_type;
+}
+
+get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: ^Type) -> ^Type {
+	assert(array_of.size != 0);
+	length *= array_of.size;
+	if all_types != nil {
+		for other_type in all_types {
+			if other_array, ok := other_type.kind.(Type_Array); ok {
+				if other_length := other_array.length; other_length == length {
+					if types_match_type(array_of, other_array.array_of) {
+						return other_type;
+					}
+				}
+			}
+		}
+	}
+
+	array_type := make_type(length, Type_Array{length, array_of});
+	append(&all_types, array_type);
+	return array_type;
+}
+
+get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Type {
+	if all_types != nil {
+		for other_type in all_types {
+			if other_slice, ok := other_type.kind.(Type_Slice); ok {
+				if types_match_type(slice_of, other_slice.slice_of) {
+					return other_type;
+				}
+			}
+		}
+	}
+
+	type_slice := make_type(SLICE_SIZE, Type_Slice{slice_of});
+	append(&all_types, type_slice);
+	return type_slice;
+}
+
+checked_this_iteration: bool;
+
+// check :: proc(node: ^$T, t: ^Type) {
+// 	a: Ast_Node; a.derived = T{};
+// 	real_node := node;
+// 	real_node.inferred_type = t;
+// 	real_node.check_state = Check_State.Checked;
+// }
+
+complete_node :: inline proc(node: ^Ast_Node, t: ^Type, nil_type_is_ok := false, loc := #caller_location) {
+	if !nil_type_is_ok {
+		assert(node != nil, tprint("node was nil at ", loc));
+		assert(t != nil, tprint("t was nil at ", loc));
+	}
+
+	node.inferred_type = t;
+	node.check_state = Check_State.Checked;
+}
+
+complete_sym :: inline proc(sym: ^Symbol, t: ^Type) {
+	sym.inferred_type = t;
+}
+
+typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> bool {
+	using Check_State;
+	switch kind in &node.derived {
+		case Ast_Number: {
+			t: ^Type;
+			if kind.is_float {
+				t = type_untyped_float;
+			}
+			else {
+				t = type_untyped_int;
+			}
+
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Unary: {
+			using Token_Type;
+
+			assert(kind.rhs.inferred_type != nil);
+			t := kind.rhs.inferred_type;
+			switch kind.op.kind {
+				case Not: {
+					assert(kind.rhs.inferred_type == type_bool);
+					t = type_bool;
+				}
+				case Plus, Minus: {
+					// all good
+				}
+				case Xor: { // deref
+					ptr, ok := t.kind.(Type_Ptr);
+					if !ok {
+						error(node, "Cannot dereference a non-pointer type, given ", type_to_string(t));
+						assert(false);
+					}
+
+					t = ptr.ptr_to;
+				}
+				case And: { // take address
+					t = get_or_make_type_ptr_to(ws, t);
+				}
+				case: {
+					unhandledcase(kind.op.kind);
+				}
+			}
+
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Binary: {
+			using Token_Type;
+
+			ensure_types_match(kind.lhs.inferred_type, kind.rhs);
+			t: ^Type;
+			switch kind.op.kind {
+				case NUMBER_OPS_BEGIN..NUMBER_OPS_END: {
+					t = kind.lhs.inferred_type;
+				}
+				case BOOL_OPS_BEGIN..BOOL_OPS_END: {
+					t = type_bool;
+				}
+				case: {
+					unhandledcase(kind.op.kind);
+				}
+			}
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Selector: {
+			assert(kind.left.inferred_type != nil);
+			left := kind.left.inferred_type;
+			left_struct := left.kind.(Type_Struct);
+			for field in left_struct.fields {
+				if field.name == kind.field {
+					complete_node(node, field.inferred_type);
+					return true;
+				}
+			}
+
+			error(node, "Type ", type_to_string(left), " doesn't have a field '", kind.field, "'");
+			assert(false);
+			return false;
+		}
+		case Ast_Subscript: {
+			assert(kind.left.inferred_type != nil);
+			left := kind.left.inferred_type;
+
+			ensure_types_match(type_int, kind.index);
+			t := (&left.kind.(Type_Array)).array_of;
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Cast: {
+			assert(kind.typespec.inferred_type != nil);
+			target := kind.typespec.inferred_type;
+			// todo: check if valid cast (can't cast string to Vector2, for example)
+			complete_node(node, target);
+			return true;
+		}
+		case Ast_String: {
+			complete_node(node, type_string);
+			return true;
+		}
+		case Ast_Identifier: {
+			// Symbols aren't AST nodes, so the Ast_Identifier can't depend() on it like normal. Oh well.
+			sym := kind.sym;
+			assert(sym != nil);
+			if sym.inferred_type == nil {
+				return false;
+			}
+
+			complete_node(node, sym.inferred_type);
+			return true;
+		}
+		case Ast_Directive: {
+			if kind.directive == "#odin" {
+				node.check_state = Checked;
+				return true;
+			}
+		}
+		case Ast_Block: {
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_Var: {
+			declared_type: ^Type;
+			if kind.typespec != nil {
+				assert(kind.typespec.inferred_type != nil);
+				declared_type = kind.typespec.inferred_type;
+			}
+			expr_type: ^Type;
+			if kind.expr != nil {
+				assert(kind.expr.inferred_type != nil);
+				expr_type = kind.expr.inferred_type;
+			}
+
+			true_type: ^Type;
+			if declared_type != nil && expr_type != nil {
+				ensure_types_match(declared_type, kind.expr);
+				true_type = declared_type;
+			}
+
+			if declared_type != nil {
+				true_type = declared_type;
+			}
+			else if expr_type != nil {
+				true_type = expr_type;
+			}
+			else {
+				assert(false, "no declared type or expr to infer type from");
+			}
+
+			assert(true_type != nil);
+			complete_node(node, true_type);
+			complete_sym(kind.sym, true_type);
+			return true;
+		}
+		case Ast_Proc: {
+			if kind.return_typespec != nil {
+				assert(kind.return_typespec.inferred_type != nil);
+				kind.return_type = kind.return_typespec.inferred_type;
+			}
+
+			t := get_or_make_type_proc(ws, kind);
+			complete_node(node, t);
+			complete_sym(kind.sym, t);
+			return true;
+		}
+		case Ast_Struct: {
+			t := make_struct_type(ws, kind);
+			complete_node(node, t);
+			complete_sym(kind.sym, t);
+			return true;
+		}
+		case Ast_Call: {
+			target_type := kind.procedure.inferred_type;
+			proc_type, ok := target_type.kind.(Type_Proc);
+			assert(ok);
+
+			if len(kind.params) != len(proc_type.params) {
+				error(node, "Expected ", len(proc_type.params), " parameters, got ", len(kind.params));
+			}
+
+			for _, idx in kind.params {
+				param := kind.params[idx];
+				ensure_types_match(proc_type.params[idx].inferred_type, param);
+			}
+
+			complete_node(node, proc_type.return_type, true);
+			return true;
+		}
+		// case Ast_Switch: {
+		// 	node.check_state = Checked;
+		// 	return true;
+		// }
+		case Ast_Range: {
+			min_type: ^Type;
+			max_type: ^Type;
+
+			if kind.min == nil {
+				min_type = type_int;
+			}
+			else {
+				assert(kind.min.inferred_type != nil);
+				min_type = kind.min.inferred_type;
+				ensure_types_match(type_int, kind.min);
+			}
+
+			if kind.max == nil {
+				max_type = type_int;
+			}
+			else {
+				assert(kind.max.inferred_type != nil);
+				max_type = kind.max.inferred_type;
+				ensure_types_match(type_int, kind.max);
+			}
+
+			t: ^Type;
+			if kind.lhs != nil {
+				assert(kind.lhs.inferred_type != nil);
+				t = kind.lhs.inferred_type;
+			}
+			else {
+				t = type_int;
+			}
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Slice: {
+			assert(kind.array.inferred_type != nil);
+			array_type := kind.array.inferred_type;
+			array_of: ^Type;
+			switch array_kind in array_type.kind {
+				case Type_Array: {
+					array_of = array_kind.array_of;
+				}
+				case Type_Dynamic_Array: {
+					array_of = array_kind.array_of;
+				}
+				case Type_Slice: {
+					array_of = array_kind.slice_of;
+				}
+				case: {
+					error(kind.array, "Cannot slice type: ", type_to_string(array_type));
+					assert(false);
+				}
+			}
+			slice_type := get_or_make_type_slice_of(ws, array_of);
+			complete_node(node, slice_type);
+			return true;
+		}
+		case Ast_If: {
+			ensure_types_match(type_bool, kind.condition);
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_Else_If: {
+			ensure_types_match(type_bool, kind.condition);
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_While: {
+			ensure_types_match(type_bool, kind.condition);
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_For_Each: {
+			assert(kind.array.inferred_type != nil);
+			array_type := kind.array.inferred_type;
+			t: ^Type;
+			switch array_kind in array_type.kind {
+				case Type_Dynamic_Array: {
+					t = array_kind.array_of;
+				}
+				case Type_Array: {
+					t = array_kind.array_of;
+				}
+				case Type_Slice: {
+					t = array_kind.slice_of;
+				}
+				case: {
+					error(kind.array, "Cannot iterate over a ", type_to_string(array_type));
+					assert(false);
+				}
+			}
+			complete_node(kind.var, t);
+			return true;
+		}
+		case Ast_Assign: {
+			assert(kind.left.inferred_type != nil);
+			left := kind.left.inferred_type;
+			ensure_types_match(left, kind.right);
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_Return: {
+			assert(kind.procedure.inferred_type != nil);
+			ensure_types_match(kind.procedure.inferred_type.kind.(Type_Proc).return_type, kind.expr);
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_Typespec_Dynamic_Array: {
+			assert(kind.typespec.inferred_type != nil);
+			array_of := kind.typespec.inferred_type;
+			t := get_or_make_type_dynamic_array_of(ws, array_of);
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Typespec_Array: {
+			assert(kind.typespec.inferred_type != nil);
+			array_of := kind.typespec.inferred_type;
+			// todo: support more than just number literals for array lengths, constexpr stuff ._.
+			kind_length := kind.size;
+			t := get_or_make_type_array_of(ws, cast(uint)kind_length, array_of);
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Typespec_Slice: {
+			assert(kind.typespec.inferred_type != nil);
+			slice_of := kind.typespec.inferred_type;
+			t := get_or_make_type_slice_of(ws, slice_of);
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Typespec_Ptr: {
+			assert(kind.typespec.inferred_type != nil);
+			ptr_to := kind.typespec.inferred_type;
+			t := get_or_make_type_ptr_to(ws, ptr_to);
+			complete_node(node, t);
+			return true;
+		}
+		case Ast_Typespec_Union: {
+			types: [dynamic]^Type;
+			biggest_nested_type: uint;
+			for spec in kind.types {
+				assert(spec.inferred_type != nil);
+				canonical_type := spec.inferred_type;
+				if canonical_type.size > biggest_nested_type do biggest_nested_type = canonical_type.size;
+				append(&types, canonical_type);
+			}
+
+			union_type: ^Type;
+			if all_types != nil {
+				type_loop:
+				for other_type in all_types {
+					other_union, ok := other_type.kind.(Type_Union);
+					if !ok do continue;
+					if len(types) == len(other_union.types) do continue;
+					if (cast(^Type)&other_union).size != biggest_nested_type do continue;
+
+					for _, idx in types {
+						if !types_match_type(types[idx], other_union.types[idx]) {
+							continue type_loop;
+						}
+					}
+					union_type = other_type;
+					break type_loop;
+				}
+			}
+
+			if union_type == nil {
+				union_type = make_type(biggest_nested_type, Type_Union{types});
+			}
+
+			append(&all_types, union_type);
+			complete_node(node, union_type);
+			return true;
+		}
+		case Ast_Comment: {
+			node.check_state = Checked;
+			return true;
+		}
+		case Ast_Directive_Include: {
+			node.check_state = Checked;
+			return true;
+		}
+		case: {
+			unhandledcase(kind^);
+		}
+	}
+
+	return false;
+}
+
+unhandledcase :: proc(value: $T, loc := #caller_location) -> ! {
+	panic(tprint("Unhandled case: ", value, " at ", pretty_location(loc)));
+}
