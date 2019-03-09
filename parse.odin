@@ -13,7 +13,7 @@ Ast_Typespec_Ptr :: struct {
 
 Ast_Typespec_Array :: struct {
 	using base: ^Ast_Node,
-	size: int,
+	size_expr: ^Ast_Node,
 	typespec: ^Ast_Node,
 }
 
@@ -526,16 +526,10 @@ parse_typespec :: proc() -> ^Ast_Node {
 			return dynamic_array.base;
 		}
 
-		array_length := parse_expr();
-
-		len_number, ok := array_length.derived.(Ast_Number);
-		assert(ok);
-		assert(!len_number.is_float);
-
+		array_length_expr := parse_expr();
 		expect(Right_Square);
-
 		typespec := parse_typespec();
-		array := node(token, Ast_Typespec_Array{{}, cast(int)len_number.int_number, typespec});
+		array := node(token, Ast_Typespec_Array{{}, array_length_expr, typespec});
 		depend(array, typespec);
 		return array.base;
 	}

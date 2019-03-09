@@ -12,19 +12,34 @@ proc basic_stuff() {
 	print_float(sqr(3) * sqr(5));
 
 	//
-	var some_ptr: ^int;
-	var some_int = 4;
-	some_ptr = &some_int;
-
-	//
-	var i = 10;
-	while i > 0 {
-		i -= 1;
+	{
+		var some_ptr: ^int;
+		var some_int = 4;
+		some_ptr = &some_int;
 	}
 
-	var vec: Vector2;
-	vec.x = cast(float)i;
-	vec.y = vector_proc(vec);
+	//
+	{
+		var i = 10;
+		while i > 0 {
+			i -= 1;
+		}
+	}
+
+	//
+	{
+		var vec: Vector2;
+		vec.x = 3;
+		vec.y = vector_proc(vec);
+	}
+
+	//
+	{
+		var arr: [16]float;
+		arr[2] = 123;
+		print_float(arr[0]);
+		print_float(arr[2]);
+	}
 }
 
 

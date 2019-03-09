@@ -484,8 +484,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			assert(kind.typespec.inferred_type != nil);
 			array_of := kind.typespec.inferred_type;
 			// todo(josh): support more than just number literals for array lengths, need a good constants system
-			kind_length := kind.size;
-			t := get_or_make_type_array_of(ws, cast(uint)kind_length, array_of);
+			length, ok := kind.size_expr.derived.(Ast_Number);
+			if !ok {
+				error(kind.size_expr, "We only handle number literals for array lengths right now.");
+				return Check_Result.Error;
+			}
+			t := get_or_make_type_array_of(ws, cast(uint)length.int_number, array_of);
 			complete_node(node, t);
 			return Check_Result.Ok;
 		}

@@ -78,12 +78,15 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 		case Ast_Binary: {
 			sbprint(&buf, expr_to_string(kind.lhs), " ", kind.op.text, " ", expr_to_string(kind.rhs));
 		}
+
 		case Ast_Unary: {
 			sbprint(&buf, kind.op.text, expr_to_string(kind.rhs));
 		}
+
 		case Ast_Selector: {
 			sbprint(&buf, expr_to_string(kind.left), ".", kind.field);
 		}
+
 		case Ast_Number: {
 			if kind.is_float {
 				sbprint(&buf, kind.float_number);
@@ -92,6 +95,7 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 				sbprint(&buf, kind.int_number);
 			}
 		}
+
 		case Ast_Call: {
 			sbprint(&buf, expr_to_string(kind.procedure), "(");
 			comma := "";
@@ -102,15 +106,19 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 			}
 			sbprint(&buf, ")");
 		}
+
 		case Ast_String: {
 			sbprint(&buf, "\"", kind.text, "\"");
 		}
+
 		case Ast_Cast: {
 			sbprint(&buf, "cast(", type_to_odin_string(node.inferred_type), ")", expr_to_string(kind.rhs));
 		}
+
 		case Ast_Identifier: {
 			return kind.name;
 		}
+
 		case Ast_Slice: {
 			sbprint(&buf, expr_to_string(kind.array), "[");
 			if kind.range.min != nil {
@@ -123,8 +131,14 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 
 			sbprint(&buf, "]");
 		}
+
+		case Ast_Subscript: {
+			sbprint(&buf, expr_to_string(kind.left), "[");
+			sbprint(&buf, expr_to_string(kind.index), "]");
+		}
+
 		case: {
-			logln("Unhandled case in expr_to_string(): ", kind^);
+			unhandledcase(kind^);
 			return "";
 		}
 	}

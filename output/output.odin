@@ -19,17 +19,31 @@ using import "core:fmt"
 
 		print_float(sqr(3) * sqr(5));
 		//
-		some_ptr: ^int;
-		some_int: int = 4;
-		some_ptr = &some_int;
-		//
-		i: int = 10;
-		for i > 0 {
-			i -= 1;
+		{
+			some_ptr: ^int;
+			some_int: int = 4;
+			some_ptr = &some_int;
 		}
-		vec: Vector2;
-		vec.x = cast(f32)i;
-		vec.y = vector_proc(vec);
+		//
+		{
+			i: int = 10;
+			for i > 0 {
+				i -= 1;
+			}
+		}
+		//
+		{
+			vec: Vector2;
+			vec.x = 3;
+			vec.y = vector_proc(vec);
+		}
+		//
+		{
+			arr: [64]f32;
+			arr[2] = 123;
+			print_float(arr[0]);
+			print_float(arr[2]);
+		}
 	}
 
 	includes :: proc() {
