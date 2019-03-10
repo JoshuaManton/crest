@@ -84,10 +84,10 @@ type_bool          := new_clone(Type{Type_Struct{"bool", nil}, 1});
 type_string        := new_clone(Type{Type_Struct{"string", nil}, 16});
 
 init_builtin_types :: proc(ws: ^Workspace) {
-	create_symbol(ws.syntax_tree, "int", type_int);
-	create_symbol(ws.syntax_tree, "float", type_float);
-	create_symbol(ws.syntax_tree, "bool", type_bool);
-	create_symbol(ws.syntax_tree, "string", type_string);
+	create_symbol(ws.global_scope, "int", type_int);
+	create_symbol(ws.global_scope, "float", type_float);
+	create_symbol(ws.global_scope, "bool", type_bool);
+	create_symbol(ws.global_scope, "string", type_string);
 }
 
 typecheck_workspace :: proc(ws: ^Workspace) -> bool {

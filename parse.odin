@@ -269,8 +269,7 @@ current_parsing_workspace: ^Workspace;
 @private
 current_parsing_block: ^Ast_Block;
 
-parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #caller_location) -> bool {
-	assert(len(text) > 0);
+parse_workspace :: proc(workspace: ^Workspace, filename: string) -> bool {
 	assert(workspace != nil);
 
 	// Push new workspace
@@ -278,35 +277,48 @@ parse_workspace :: proc(workspace: ^Workspace, filename, text: string, loc := #c
 	current_parsing_workspace = workspace;
 	defer current_parsing_workspace = old_workspace;
 
-	old_block := current_parsing_block;
-	block := node(Token{}, Ast_Block{{}, nil, nil});
-	current_parsing_block = block;
-	defer current_parsing_block = old_block;
-
-	block.stmts = parse_text_to_stmt_list(filename, text);
-	for s in block.stmts {
-		depend(block, s);
-	}
-
-	workspace.syntax_tree = block;
-
-	ok := typecheck_workspace(workspace);
-	if !ok {
+	assert(workspace.global_scope == nil);
+	workspace.global_scope = node(Token{}, Ast_Block{{}, nil, nil});
+	if !parse_file(workspace, filename, workspace.global_scope) {
 		return false;
 	}
 
 	return true;
 }
 
-parse_text_to_stmt_list :: proc(filename, text: string, loc := #caller_location) -> [dynamic]^Ast_Node {
-	if !push_new_lexer_text(filename, text) {
-		assert(false);
-		return nil;
+parse_file :: proc(workspace: ^Workspace, filename: string, scope: ^Ast_Block, loc := #caller_location) -> bool {
+	bytes, file_ok := os.read_entire_file(filename);
+	if !file_ok {
+		logln("Couldn't open file: ", filename);
+		return false;
 	}
+
+	text := cast(string)bytes;
+	assert(len(text) > 0);
+
+	if !parse_text(filename, text, scope) {
+		logln("Error during parsing.");
+		return false;
+	}
+
+	return true;
+}
+
+parse_text :: proc(filename: string, text: string, scope: ^Ast_Block) -> bool {
+	old_block := current_parsing_block;
+	current_parsing_block = scope;
+	defer current_parsing_block = old_block;
+
+	push_new_lexer_text(filename, text);
 	defer pop_lexer();
 
-	list := parse_stmt_list();
-	return list;
+	stmts := parse_stmt_list();
+	for s in stmts {
+		depend(current_parsing_block, s);
+		append(&current_parsing_block.stmts, s);
+	}
+
+	return true;
 }
 
 parse_stmt_list :: proc() -> [dynamic]^Ast_Node {
@@ -317,13 +329,7 @@ parse_stmt_list :: proc() -> [dynamic]^Ast_Node {
 	for !is_token(Eof) && !is_token(Right_Curly) {
 		stmt := parse_stmt();
 		if include, ok := stmt.derived.(Ast_Directive_Include); ok {
-			bytes, ok := os.read_entire_file(include.filename);
-			assert(ok, tprint("Couldn't open file ", include.filename));
-			text := cast(string)bytes;
-			include_stmts := parse_text_to_stmt_list(include.filename, text);
-			for include_stmt in include_stmts {
-				append(&stmts, include_stmt);
-			}
+			parse_file(current_parsing_workspace, include.filename, current_parsing_block);
 		}
 		else {
 			append(&stmts, stmt);
@@ -356,12 +362,15 @@ _alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -
 }
 
 node :: inline proc(token: Token, derived: $T, loc := #caller_location) -> ^T {
+	assert(current_parsing_workspace != nil);
+
 	ptr := _alloc_node(token, derived);
 	append(&current_parsing_workspace.nodes_to_typecheck, ptr.base);
 	return ptr;
 }
 
 depend :: inline proc(node: ^$T, depends_on: ^$S, loc := #caller_location) {
+	assert(current_parsing_workspace != nil);
 	assert(node != nil, tprint("node was nil at ", pretty_location(loc)));
 	assert(depends_on != nil, tprint("depends_on was nil at ", pretty_location(loc)));
 	append(&node.depends, depends_on);

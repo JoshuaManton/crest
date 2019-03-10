@@ -376,7 +376,7 @@ using import "core:fmt"
 
 	output_code_buffer: [dynamic]u8;
 	output(&output_code_buffer, ODIN_PREAMBLE);
-	print_block(&output_code_buffer, workspace.syntax_tree);
+	print_block(&output_code_buffer, workspace.global_scope);
 	output_code := cast(string)output_code_buffer[:];
 
 	os.write_entire_file("output/output.odin", cast([]u8)output_code);

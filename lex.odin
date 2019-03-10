@@ -143,7 +143,7 @@ Lexer :: struct {
 
 lexers: [dynamic]Lexer;
 
-push_new_lexer_text :: proc(filename, text: string) -> bool {
+push_new_lexer_text :: proc(filename, text: string) {
 	bytes := make([]byte, len(text)+1);
 	copy(bytes, cast([]byte)text);
 	bytes[len(text)] = 0;
@@ -151,8 +151,6 @@ push_new_lexer_text :: proc(filename, text: string) -> bool {
 
 	lexer := Lexer{filename, program_text, 0, 1, 1};
 	append(&lexers, lexer);
-
-	return true;
 }
 
 pop_lexer :: proc() {
