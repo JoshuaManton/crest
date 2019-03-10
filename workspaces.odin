@@ -18,6 +18,4 @@ Workspace :: struct {
 	all_depends: [dynamic]Depend_Entry,
 	nodes_to_typecheck: [dynamic]^Ast_Node,
 	all_types: [dynamic]^Type,
-
-	program_text: [dynamic]u8,
 }
