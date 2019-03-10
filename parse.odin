@@ -263,30 +263,19 @@ Site :: struct {
 
 PROC_IS_ODIN_PROC : u32 : 1 << 0;
 
-@private
-current_parsing_workspace: ^Workspace;
+parse_workspace :: proc(ws: ^Workspace, filename: string) -> bool {
+	assert(ws != nil);
 
-@private
-current_parsing_block: ^Ast_Block;
-
-parse_workspace :: proc(workspace: ^Workspace, filename: string) -> bool {
-	assert(workspace != nil);
-
-	// Push new workspace
-	old_workspace := current_parsing_workspace;
-	current_parsing_workspace = workspace;
-	defer current_parsing_workspace = old_workspace;
-
-	assert(workspace.global_scope == nil);
-	workspace.global_scope = node(Token{}, Ast_Block{{}, nil, nil});
-	if !parse_file(workspace, filename, workspace.global_scope) {
+	assert(ws.global_scope == nil);
+	ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
+	if !parse_file(ws, filename, ws.global_scope) {
 		return false;
 	}
 
 	return true;
 }
 
-parse_file :: proc(workspace: ^Workspace, filename: string, scope: ^Ast_Block, loc := #caller_location) -> bool {
+parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block, loc := #caller_location) -> bool {
 	bytes, file_ok := os.read_entire_file(filename);
 	if !file_ok {
 		logln("Couldn't open file: ", filename);
@@ -296,7 +285,7 @@ parse_file :: proc(workspace: ^Workspace, filename: string, scope: ^Ast_Block, l
 	text := cast(string)bytes;
 	assert(len(text) > 0);
 
-	if !parse_text(filename, text, scope) {
+	if !parse_text(ws, filename, text, scope) {
 		logln("Error during parsing.");
 		return false;
 	}
@@ -304,43 +293,35 @@ parse_file :: proc(workspace: ^Workspace, filename: string, scope: ^Ast_Block, l
 	return true;
 }
 
-parse_text :: proc(filename: string, text: string, scope: ^Ast_Block) -> bool {
-	old_block := current_parsing_block;
-	current_parsing_block = scope;
-	defer current_parsing_block = old_block;
+parse_text :: proc(ws: ^Workspace, filename: string, text: string, scope: ^Ast_Block) -> bool {
+	old_block := ws.current_scope;
+	ws.current_scope = scope;
+	defer ws.current_scope = old_block;
 
 	push_new_lexer_text(filename, text);
 	defer pop_lexer();
 
-	stmts := parse_stmt_list();
-	for s in stmts {
-		depend(current_parsing_block, s);
-		append(&current_parsing_block.stmts, s);
-	}
-
+	parse_stmt_list(ws);
 	return true;
 }
 
-parse_stmt_list :: proc() -> [dynamic]^Ast_Node {
+parse_stmt_list :: proc(ws: ^Workspace) {
 	using Token_Type;
 
-	stmts: [dynamic]^Ast_Node;
-
 	for !is_token(Eof) && !is_token(Right_Curly) {
-		stmt := parse_stmt();
+		stmt := parse_stmt(ws);
 		if include, ok := stmt.derived.(Ast_Directive_Include); ok {
-			parse_file(current_parsing_workspace, include.filename, current_parsing_block);
+			parse_file(ws, include.filename, ws.current_scope);
 		}
 		else {
-			append(&stmts, stmt);
+			depend(ws, ws.current_scope, stmt);
+			append(&ws.current_scope.stmts, stmt);
 		}
 	}
-
-	return stmts;
 }
 
 
-_alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -> ^T {
+_alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #caller_location) -> ^T {
 	@static last_serial: int;
 
 	last_serial += 1;
@@ -351,7 +332,7 @@ _alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -
 		derived,
 		last_serial,
 		token.site,
-		current_parsing_block,
+		ws.current_scope,
 		token,
 		Check_State.Unchecked,
 		nil,
@@ -361,20 +342,20 @@ _alloc_node :: inline proc(token: Token, derived: $T, loc := #caller_location) -
 	return cast(^T)ptr;
 }
 
-node :: inline proc(token: Token, derived: $T, loc := #caller_location) -> ^T {
-	assert(current_parsing_workspace != nil);
+node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #caller_location) -> ^T {
+	assert(ws != nil);
 
-	ptr := _alloc_node(token, derived);
-	append(&current_parsing_workspace.nodes_to_typecheck, ptr.base);
+	ptr := _alloc_node(ws, token, derived);
+	append(&ws.nodes_to_typecheck, ptr.base);
 	return ptr;
 }
 
-depend :: inline proc(node: ^$T, depends_on: ^$S, loc := #caller_location) {
-	assert(current_parsing_workspace != nil);
+depend :: inline proc(ws: ^Workspace, node: ^$T, depends_on: ^$S, loc := #caller_location) {
+	assert(ws != nil);
 	assert(node != nil, tprint("node was nil at ", pretty_location(loc)));
 	assert(depends_on != nil, tprint("depends_on was nil at ", pretty_location(loc)));
 	append(&node.depends, depends_on);
-	append(&current_parsing_workspace.all_depends, Depend_Entry{node, depends_on});
+	append(&ws.all_depends, Depend_Entry{node, depends_on});
 }
 
 unexpected_token :: proc(token: Token, loc: rt.Source_Code_Location, expected: ..Token_Type) {
@@ -478,14 +459,14 @@ is_ident_or_type_keyword :: proc(kind: Token_Type) -> bool {
 	return false;
 }
 
-parse_typespec :: proc() -> ^Ast_Node {
+parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
 	if is_ident_or_type_keyword(token.kind) {
 		token = next_token();
-		symbol := node(token, Ast_Identifier{{}, token.text, nil});
-		queue_identifier_for_resolving(current_parsing_workspace, symbol);
+		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
+		queue_identifier_for_resolving(ws, symbol);
 		return symbol.base;
 	}
 
@@ -495,18 +476,18 @@ parse_typespec :: proc() -> ^Ast_Node {
 
 		types: [dynamic]^Ast_Node;
 		for peek().kind != Right_Curly && peek().kind != Eof {
-			spec := parse_typespec();
+			spec := parse_typespec(ws);
 			append(&types, spec);
 			expect(Comma);
 		}
 
 		expect(Right_Curly);
 
-		union_node := node(token, Ast_Typespec_Union{{}, types});
+		union_node := node(ws, token, Ast_Typespec_Union{{}, types});
 
 		// todo: factor this into the loop above
 		for t in types {
-			depend(union_node, t);
+			depend(ws, union_node, t);
 		}
 
 		return union_node.base;
@@ -520,78 +501,78 @@ parse_typespec :: proc() -> ^Ast_Node {
 	if modifier.kind == Left_Square {
 		if peek().kind == Right_Square {
 			next_token();
-			typespec := parse_typespec();
-			slice := node(token, Ast_Typespec_Slice{{}, typespec});
-			depend(slice, typespec);
+			typespec := parse_typespec(ws);
+			slice := node(ws, token, Ast_Typespec_Slice{{}, typespec});
+			depend(ws, slice, typespec);
 			return slice.base;
 		}
 
 		if peek().kind == Range {
 			next_token();
 			expect(Right_Square);
-			typespec := parse_typespec();
-			dynamic_array := node(token, Ast_Typespec_Dynamic_Array{{}, typespec});
-			depend(dynamic_array, typespec);
+			typespec := parse_typespec(ws);
+			dynamic_array := node(ws, token, Ast_Typespec_Dynamic_Array{{}, typespec});
+			depend(ws, dynamic_array, typespec);
 			return dynamic_array.base;
 		}
 
-		array_length_expr := parse_expr();
+		array_length_expr := parse_expr(ws);
 		expect(Right_Square);
-		typespec := parse_typespec();
-		array := node(token, Ast_Typespec_Array{{}, array_length_expr, typespec});
-		depend(array, typespec);
+		typespec := parse_typespec(ws);
+		array := node(ws, token, Ast_Typespec_Array{{}, array_length_expr, typespec});
+		depend(ws, array, typespec);
 		return array.base;
 	}
 
 	assert(modifier.kind == Xor);
-	typespec := parse_typespec();
-	ptr := node(token, Ast_Typespec_Ptr{{}, typespec});
-	depend(ptr, typespec);
+	typespec := parse_typespec(ws);
+	ptr := node(ws, token, Ast_Typespec_Ptr{{}, typespec});
+	depend(ws, ptr, typespec);
 	return ptr.base;
 }
 
 import "core:strconv"
 
-parse_operand :: proc() -> ^Ast_Node {
+parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := next_token();
 	switch token.kind {
 		case Null: {
-			expr := node(token, Ast_Null{});
+			expr := node(ws, token, Ast_Null{});
 			return expr.base;
 		}
 		case Integer_Literal: {
-			num := node(token, Ast_Number{{}, false, strconv.parse_i64(token.text), 0});
+			num := node(ws, token, Ast_Number{{}, false, strconv.parse_i64(token.text), 0});
 			return num.base;
 		}
 		case Float_Literal: {
-			num := node(token, Ast_Number{{}, true, 0, strconv.parse_f64(token.text)});
+			num := node(ws, token, Ast_Number{{}, true, 0, strconv.parse_f64(token.text)});
 			return num.base;
 		}
 		case String_Literal: {
-			str := node(token, Ast_String{{}, token.text});
+			str := node(ws, token, Ast_String{{}, token.text});
 			return str.base;
 		}
 		case Left_Paren: {
-			nested := parse_expr();
-			node := node(token, Ast_Paren{{}, nested});
+			nested := parse_expr(ws);
+			node := node(ws, token, Ast_Paren{{}, nested});
 			expect(Right_Paren);
-			depend(node, nested);
+			depend(ws, node, nested);
 			return node.base;
 		}
 		case Sizeof: {
 			expect(Left_Paren);
-			typespec := parse_typespec();
+			typespec := parse_typespec(ws);
 			expect(Right_Paren);
-			expr := node(token, Ast_Sizeof{{}, typespec});
-			depend(expr, typespec);
+			expr := node(ws, token, Ast_Sizeof{{}, typespec});
+			depend(ws, expr, typespec);
 			return expr.base;
 		}
 		case Ident: {
 			ident := token.text;
-			sym := node(token, Ast_Identifier{{}, token.text, nil});
-			queue_identifier_for_resolving(current_parsing_workspace, sym);
+			sym := node(ws, token, Ast_Identifier{{}, token.text, nil});
+			queue_identifier_for_resolving(ws, sym);
 			return sym.base;
 		}
 		case: {
@@ -602,11 +583,11 @@ parse_operand :: proc() -> ^Ast_Node {
 	}
 }
 
-parse_base_expr :: proc() -> ^Ast_Node {
+parse_base_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_operand();
+	current_expr := parse_operand(ws);
 
 	for is_postfix_op() {
 		op := next_token();
@@ -614,14 +595,14 @@ parse_base_expr :: proc() -> ^Ast_Node {
 		switch op.kind {
 			case Dot: {
 				sym_token := expect(Ident);
-				selector := node(token, Ast_Selector{{}, current_expr, sym_token.text});
-				depend(selector, current_expr);
+				selector := node(ws, token, Ast_Selector{{}, current_expr, sym_token.text});
+				depend(ws, selector, current_expr);
 				next_expr = selector.base;
 			}
 			case Left_Paren: {
 				parameters: [dynamic]^Ast_Node;
 				for !is_token(Right_Paren) {
-					param := parse_expr();
+					param := parse_expr(ws);
 					append(&parameters, param);
 
 					if is_token(Comma) {
@@ -629,20 +610,20 @@ parse_base_expr :: proc() -> ^Ast_Node {
 					}
 				}
 				expect(Right_Paren);
-				next_expr = node(token, Ast_Call{{}, current_expr, parameters}).base;
+				next_expr = node(ws, token, Ast_Call{{}, current_expr, parameters}).base;
 
-				depend(next_expr, current_expr);
+				depend(ws, next_expr, current_expr);
 
 				// todo: factor into the loop above
 				for p in parameters {
-					depend(next_expr, p);
+					depend(ws, next_expr, p);
 				}
 			}
 			case Left_Square: {
 				expression: ^Ast_Node;
 
 				if !is_token(Range) {
-					expression = parse_expr();
+					expression = parse_expr(ws);
 				}
 
 				if is_token(Range) {
@@ -651,19 +632,19 @@ parse_base_expr :: proc() -> ^Ast_Node {
 					min := expression;
 					max: ^Ast_Node;
 					if !is_token(Right_Square) {
-						max = parse_expr();
+						max = parse_expr(ws);
 					}
 
-					range := node(op, Ast_Range{{}, current_expr, min, max});
-					if min != nil do depend(range, min);
-					if max != nil do depend(range, max);
-					next_expr = node(token, Ast_Slice{{}, current_expr, range}).base;
-					depend(next_expr, current_expr);
-					depend(next_expr, range);
+					range := node(ws, op, Ast_Range{{}, current_expr, min, max});
+					if min != nil do depend(ws, range, min);
+					if max != nil do depend(ws, range, max);
+					next_expr = node(ws, token, Ast_Slice{{}, current_expr, range}).base;
+					depend(ws, next_expr, current_expr);
+					depend(ws, next_expr, range);
 				}
 				else {
-					next_expr = node(token, Ast_Subscript{{}, current_expr, expression}).base;
-					depend(next_expr, current_expr);
+					next_expr = node(ws, token, Ast_Subscript{{}, current_expr, expression}).base;
+					depend(ws, next_expr, current_expr);
 				}
 
 				expect(Right_Square);
@@ -681,118 +662,118 @@ parse_base_expr :: proc() -> ^Ast_Node {
 	return current_expr;
 }
 
-parse_unary_expr :: proc() -> ^Ast_Node {
+parse_unary_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	if is_unary_op() {
 		op := next_token();
-		rhs := parse_unary_expr();
-		node := node(op, Ast_Unary{{}, op, rhs});
-		depend(node, rhs);
+		rhs := parse_unary_expr(ws);
+		node := node(ws, op, Ast_Unary{{}, op, rhs});
+		depend(ws, node, rhs);
 		return node.base;
 	}
 	else if is_token(Cast) {
 		cast_keyword := next_token();
 		expect(Left_Paren);
-		target_type := parse_typespec();
+		target_type := parse_typespec(ws);
 		expect(Right_Paren);
-		rhs := parse_expr();
-		node := node(cast_keyword, Ast_Cast{{}, target_type, rhs});
-		depend(node, rhs);
-		depend(node, target_type);
+		rhs := parse_expr(ws);
+		node := node(ws, cast_keyword, Ast_Cast{{}, target_type, rhs});
+		depend(ws, node, rhs);
+		depend(ws, node, target_type);
 		return node.base;
 	}
 
-	return parse_base_expr();
+	return parse_base_expr(ws);
 }
 
-parse_mul_expr :: proc() -> ^Ast_Node {
+parse_mul_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_unary_expr();
+	current_expr := parse_unary_expr(ws);
 	for is_mul_op() {
 		op := next_token();
-		rhs := parse_unary_expr();
+		rhs := parse_unary_expr(ws);
 		lhs := current_expr;
-		current_expr = node(token, Ast_Binary{{}, op, current_expr, rhs}).base;
-		depend(current_expr, rhs);
-		depend(current_expr, lhs);
+		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		depend(ws, current_expr, rhs);
+		depend(ws, current_expr, lhs);
 	}
 	return current_expr;
 }
 
-parse_add_expr :: proc() -> ^Ast_Node {
+parse_add_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_mul_expr();
+	current_expr := parse_mul_expr(ws);
 	for is_add_op() {
 		op := next_token();
-		rhs := parse_mul_expr();
+		rhs := parse_mul_expr(ws);
 		lhs := current_expr;
-		current_expr = node(token, Ast_Binary{{}, op, current_expr, rhs}).base;
-		depend(current_expr, rhs);
-		depend(current_expr, lhs);
+		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		depend(ws, current_expr, rhs);
+		depend(ws, current_expr, lhs);
 	}
 	return current_expr;
 }
 
-parse_cmp_expr :: proc() -> ^Ast_Node {
+parse_cmp_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_add_expr();
+	current_expr := parse_add_expr(ws);
 	for is_cmp_op() {
 		op := next_token();
-		rhs := parse_add_expr();
+		rhs := parse_add_expr(ws);
 		lhs := current_expr;
-		current_expr = node(token, Ast_Binary{{}, op, current_expr, rhs}).base;
-		depend(current_expr, rhs);
-		depend(current_expr, lhs);
+		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		depend(ws, current_expr, rhs);
+		depend(ws, current_expr, lhs);
 	}
 	return current_expr;
 }
 
-parse_and_expr :: proc() -> ^Ast_Node {
+parse_and_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_cmp_expr();
+	current_expr := parse_cmp_expr(ws);
 	for is_token(And_And) {
 		op := next_token();
-		rhs := parse_cmp_expr();
+		rhs := parse_cmp_expr(ws);
 		lhs := current_expr;
-		current_expr = node(token, Ast_Binary{{}, op, current_expr, rhs}).base;
-		depend(current_expr, rhs);
-		depend(current_expr, lhs);
+		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		depend(ws, current_expr, rhs);
+		depend(ws, current_expr, lhs);
 	}
 
 	return current_expr;
 }
 
-parse_or_expr :: proc() -> ^Ast_Node {
+parse_or_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	current_expr := parse_and_expr();
+	current_expr := parse_and_expr(ws);
 	for is_token(Or_Or) {
 		op := next_token();
-		rhs := parse_and_expr();
+		rhs := parse_and_expr(ws);
 		lhs := current_expr;
-		current_expr = node(token, Ast_Binary{{}, op, current_expr, rhs}).base;
-		depend(current_expr, rhs);
-		depend(current_expr, lhs);
+		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		depend(ws, current_expr, rhs);
+		depend(ws, current_expr, lhs);
 	}
 
 	return current_expr;
 }
 
-parse_expr :: inline proc(loc := #caller_location) -> ^Ast_Node {
-	return parse_or_expr();
+parse_expr :: inline proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Node {
+	return parse_or_expr(ws);
 }
 
-parse_var_decl :: proc(require_var := true, only_name := false) -> ^Ast_Var {
+parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) -> ^Ast_Var {
 	using Token_Type;
 
 	root_token: Token;
@@ -809,24 +790,24 @@ parse_var_decl :: proc(require_var := true, only_name := false) -> ^Ast_Var {
 
 	name := name_token.text;
 
-	decl := create_symbol(current_parsing_block, name, nil);
+	decl := create_symbol(ws.current_scope, name, nil);
 
 	typespec: ^Ast_Node;
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(root_token, Ast_Var{{}, name, nil, nil, decl});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl});
 	}
 
 	if is_token(Colon) {
 		next_token();
-		typespec = parse_typespec();
+		typespec = parse_typespec(ws);
 	}
 
 	if !is_token(In) {
 		if is_token(Assign) {
 			next_token();
-			value = parse_expr();
+			value = parse_expr(ws);
 		}
 		else {
 			if typespec == nil {
@@ -835,25 +816,25 @@ parse_var_decl :: proc(require_var := true, only_name := false) -> ^Ast_Var {
 		}
 	}
 
-	var := node(root_token, Ast_Var{{}, name, typespec, value, decl});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl});
 	if typespec != nil {
-		depend(var, typespec);
+		depend(ws, var, typespec);
 	}
 	if value != nil {
-		depend(var, value);
+		depend(ws, var, value);
 	}
 
 	return var;
 }
 
-try_parse_directive :: proc() -> ^Ast_Directive {
+try_parse_directive :: proc(ws: ^Workspace) -> ^Ast_Directive {
 	using Token_Type;
 
 	token := peek();
 	switch token.kind {
 		case Directive_Odin: {
 			directive := next_token();
-			return node(directive, Ast_Directive{{}, directive.text});
+			return node(ws, directive, Ast_Directive{{}, directive.text});
 		}
 		case: {
 			return nil;
@@ -863,10 +844,10 @@ try_parse_directive :: proc() -> ^Ast_Directive {
 
 currently_parsing_procedure: ^Ast_Proc;
 
-try_parse_proc_directives :: proc() -> u32 {
+try_parse_proc_directives :: proc(ws: ^Workspace) -> u32 {
 	flags: u32;
 	for true {
-		directive := try_parse_directive();
+		directive := try_parse_directive(ws);
 		if directive == nil do break;
 		switch directive.directive {
 			case "#odin": {
@@ -878,12 +859,12 @@ try_parse_proc_directives :: proc() -> u32 {
 	return flags;
 }
 
-parse_proc_decl :: proc() -> ^Ast_Proc {
+parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	using Token_Type;
 
 	proc_token := expect(Proc);
 
-	procedure_stmt := node(proc_token, Ast_Proc{});
+	procedure_stmt := node(ws, proc_token, Ast_Proc{});
 
 	was_parsing_procedure := currently_parsing_procedure;
 	currently_parsing_procedure = procedure_stmt;
@@ -895,7 +876,7 @@ parse_proc_decl :: proc() -> ^Ast_Proc {
 
 	params: [dynamic]^Ast_Var;
 	for !is_token(Right_Paren) {
-		param := parse_var_decl(false);
+		param := parse_var_decl(ws, false);
 		append(&params, param);
 
 		if is_token(Comma) {
@@ -905,22 +886,22 @@ parse_proc_decl :: proc() -> ^Ast_Proc {
 
 	expect(Right_Paren);
 
-	flags := try_parse_proc_directives();
+	flags := try_parse_proc_directives(ws);
 
 	return_type: ^Ast_Node;
 	if !is_token(Left_Curly) && !is_token(Semicolon) {
-		return_type = parse_typespec();
+		return_type = parse_typespec(ws);
 	}
 
 	block: ^Ast_Block;
 	if peek().kind != Semicolon {
-		block = parse_block();
+		block = parse_block(ws);
 	}
 	else {
 		expect(Semicolon);
 	}
 
-	decl := create_symbol(current_parsing_block, name, nil);
+	decl := create_symbol(ws.current_scope, name, nil);
 
 	procedure_stmt.name = name;
 	procedure_stmt.params = params;
@@ -930,68 +911,68 @@ parse_proc_decl :: proc() -> ^Ast_Proc {
 	procedure_stmt.sym = decl;
 
 	if return_type != nil {
-		depend(procedure_stmt, return_type);
+		depend(ws, procedure_stmt, return_type);
 	}
 
 	// note(josh): I don't think we need to depend on proc bodies
 	// if block != nil {
-	// 	depend(procedure_stmt, block);
+	// 	depend(ws, procedure_stmt, block);
 	// }
 
 	// todo: factor into loop above
 	for p in params {
-		depend(procedure_stmt, p);
+		depend(ws, procedure_stmt, p);
 	}
 
 
 	return procedure_stmt;
 }
 
-parse_struct_decl :: proc() -> ^Ast_Struct {
+parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Struct {
 	using Token_Type;
 
 	struct_token := expect(Struct);
 	name_token := expect(Ident);
 
 	fields: [dynamic]^Ast_Var;
-	block := parse_block();
+	block := parse_block(ws);
 	field_stmts := block.stmts;
 	for _, idx in field_stmts {
 		field := &field_stmts[idx].derived.(Ast_Var);
 		append(&fields, field);
 	}
 
-	decl := create_symbol(current_parsing_block, name_token.text, nil);
-	s := node(struct_token, Ast_Struct{{}, name_token.text, fields, decl});
+	decl := create_symbol(ws.current_scope, name_token.text, nil);
+	s := node(ws, struct_token, Ast_Struct{{}, name_token.text, fields, decl});
 
-	depend(s, block);
+	depend(ws, s, block);
 	return s;
 }
 
-parse_range_or_single_expr :: proc() -> (^Ast_Node, bool) {
+parse_range_or_single_expr :: proc(ws: ^Workspace) -> (^Ast_Node, bool) {
 	using Token_Type;
 
 	token := peek();
-	expr1 := parse_expr();
+	expr1 := parse_expr(ws);
 	if is_token(Range) {
 		next_token();
-		expr2 := parse_expr();
-		node := node(token, Ast_Range{{}, nil, expr1, expr2});
-		depend(node, expr1);
-		depend(node, expr2);
+		expr2 := parse_expr(ws);
+		node := node(ws, token, Ast_Range{{}, nil, expr1, expr2});
+		depend(ws, node, expr1);
+		depend(ws, node, expr2);
 		return node.base, true;
 	}
 
 	return expr1, false;
 }
 
-parse_if_stmt :: proc() -> ^Ast_If {
+parse_if_stmt :: proc(ws: ^Workspace) -> ^Ast_If {
 	using Token_Type;
 
 	if_token := next_token();
-	if_condition := parse_expr();
-	if_block := parse_block();
-	if_stmt := node(if_token, Ast_If{{}, if_condition, if_block, nil, nil});
+	if_condition := parse_expr(ws);
+	if_block := parse_block(ws);
+	if_stmt := node(ws, if_token, Ast_If{{}, if_condition, if_block, nil, nil});
 
 	for is_token(Else) {
 		else_token := next_token();
@@ -999,42 +980,42 @@ parse_if_stmt :: proc() -> ^Ast_If {
 		if is_token(If) {
 			next_token();
 
-			else_if_condition := parse_expr();
-			else_if_block := parse_block();
+			else_if_condition := parse_expr(ws);
+			else_if_block := parse_block(ws);
 
-			else_if := node(else_token, Ast_Else_If{{}, else_if_condition, else_if_block});
+			else_if := node(ws, else_token, Ast_Else_If{{}, else_if_condition, else_if_block});
 			append(&if_stmt.else_ifs, else_if);
 		}
 		else {
 			assert(if_stmt.else_block == nil);
-			block := parse_block();
+			block := parse_block(ws);
 			if_stmt.else_block = block;
 		}
 	}
 
-	depend(if_stmt, if_condition);
-	depend(if_stmt, if_block);
+	depend(ws, if_stmt, if_condition);
+	depend(ws, if_stmt, if_block);
 
 	// todo: factor into loop above
 	for ie in if_stmt.else_ifs {
-		depend(if_stmt, ie);
+		depend(ws, if_stmt, ie);
 	}
 
-	depend(if_stmt, if_stmt.else_block);
+	depend(ws, if_stmt, if_stmt.else_block);
 
 	return if_stmt;
 }
 
-parse_loop :: proc() -> ^Ast_Node {
+parse_loop :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	root_token := next_token();
 	if root_token.kind == While {
-		condition := parse_expr();
-		block := parse_block();
-		while_stmt := node(root_token, Ast_While{{}, condition, block});
-		depend(while_stmt, condition);
-		depend(while_stmt, block);
+		condition := parse_expr(ws);
+		block := parse_block(ws);
+		while_stmt := node(ws, root_token, Ast_While{{}, condition, block});
+		depend(ws, while_stmt, condition);
+		depend(ws, while_stmt, block);
 		return while_stmt.base;
 	}
 	else {
@@ -1043,77 +1024,77 @@ parse_loop :: proc() -> ^Ast_Node {
 			// for i
 			var: ^Ast_Var;
 			if !is_token(Semicolon) {
-				var = parse_var_decl(true);
+				var = parse_var_decl(ws, true);
 			}
 			expect(Semicolon);
 			condition: ^Ast_Node;
 			if !is_token(Semicolon) {
-				condition = parse_expr();
+				condition = parse_expr(ws);
 			}
 			expect(Semicolon);
 
 			post_stmt: ^Ast_Node;
 			if !is_token(Left_Curly) {
-				post_stmt = parse_stmt();
+				post_stmt = parse_stmt(ws);
 			}
 
-			block := parse_block();
-			loop := node(root_token, Ast_For_I{{}, var, condition, post_stmt, block});
+			block := parse_block(ws);
+			loop := node(ws, root_token, Ast_For_I{{}, var, condition, post_stmt, block});
 
-			if var != nil do depend(loop, var);
-			if condition != nil do depend(loop, condition);
-			if post_stmt != nil do depend(loop, post_stmt);
-			depend(loop, block);
+			if var != nil do depend(ws, loop, var);
+			if condition != nil do depend(ws, loop, condition);
+			if post_stmt != nil do depend(ws, loop, post_stmt);
+			depend(ws, loop, block);
 
 			return loop.base;
 		}
 		else {
 			// for each
-			var := parse_var_decl(false);
+			var := parse_var_decl(ws, false);
 			expect(In);
-			expr, is_range := parse_range_or_single_expr();
+			expr, is_range := parse_range_or_single_expr(ws);
 
-			block := parse_block();
-			loop := node(root_token, Ast_For_Each{{}, var, expr, block});
+			block := parse_block(ws);
+			loop := node(ws, root_token, Ast_For_Each{{}, var, expr, block});
 
-			depend(loop, var);
-			depend(loop, block);
+			depend(ws, loop, var);
+			depend(ws, loop, block);
 
 			return loop.base;
 		}
 	}
 }
 
-parse_stmt :: proc() -> ^Ast_Node {
+parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
 	switch (token.kind) {
 		case Comment: {
 			comment := next_token();
-			return node(comment, Ast_Comment{{}, comment.text}).base;
+			return node(ws, comment, Ast_Comment{{}, comment.text}).base;
 		}
 		case Directive_Include: {
 			directive := expect(Directive_Include);
 			filename := expect(String_Literal);
-			return node(directive, Ast_Directive_Include{{}, filename.text}).base;
+			return node(ws, directive, Ast_Directive_Include{{}, filename.text}).base;
 		}
 		case Left_Curly: {
-			block := parse_block();
+			block := parse_block(ws);
 			return block.base;
 		}
 		case Proc: {
-			decl := parse_proc_decl();
+			decl := parse_proc_decl(ws);
 			return decl.base;
 		}
 		case Var: {
-			var := parse_var_decl();
+			var := parse_var_decl(ws);
 			expect(Semicolon);
 			// todo: this should be fine but not sure
 			return var.base;
 		}
 		case Struct: {
-			s := parse_struct_decl();
+			s := parse_struct_decl(ws);
 			return s.base;
 		}
 		case Switch: {
@@ -1121,25 +1102,25 @@ parse_stmt :: proc() -> ^Ast_Node {
 			return nil;
 		}
 		case For, While: {
-			loop := parse_loop();
+			loop := parse_loop(ws);
 			return loop;
 		}
 		case If: {
-			i := parse_if_stmt();
+			i := parse_if_stmt(ws);
 			return i.base;
 		}
 		case Return: {
 			ret_token := next_token();
-			expr := parse_expr();
+			expr := parse_expr(ws);
 			assert(currently_parsing_procedure != nil);
-			stmt := node(ret_token, Ast_Return{{}, currently_parsing_procedure, expr});
+			stmt := node(ws, ret_token, Ast_Return{{}, currently_parsing_procedure, expr});
 			expect(Semicolon);
-			depend(stmt, expr);
-			depend(stmt, currently_parsing_procedure);
+			depend(ws, stmt, expr);
+			depend(ws, stmt, currently_parsing_procedure);
 			return stmt.base;
 		}
 		case: {
-			parse_assign_stmt :: proc(lhs: ^Ast_Node) -> ^Ast_Node {
+			parse_assign_stmt :: proc(ws: ^Workspace, lhs: ^Ast_Node) -> ^Ast_Node {
 				if !is_assign_op() {
 					t := peek();
 					println("Syntax error: Expected assign operator, got", t.kind, "at", site(t.site));
@@ -1147,18 +1128,18 @@ parse_stmt :: proc() -> ^Ast_Node {
 				}
 
 				op := next_token();
-				rhs := parse_expr();
-				stmt := node(op, Ast_Assign{{}, op.kind, lhs, rhs});
+				rhs := parse_expr(ws);
+				stmt := node(ws, op, Ast_Assign{{}, op.kind, lhs, rhs});
 				expect(Semicolon);
 
-				depend(stmt, lhs);
-				depend(stmt, rhs);
+				depend(ws, stmt, lhs);
+				depend(ws, stmt, rhs);
 
 				return stmt.base;
 			}
 
 			root_token := peek();
-			expr := parse_expr();
+			expr := parse_expr(ws);
 			switch kind in expr.derived {
 				case Ast_Call: {
 					expect(Semicolon);
@@ -1166,7 +1147,7 @@ parse_stmt :: proc() -> ^Ast_Node {
 				}
 				case Ast_Unary: {
 					if (cast(^Ast_Unary)expr).op.kind == Xor { // dereference assignment
-						stmt := parse_assign_stmt(expr);
+						stmt := parse_assign_stmt(ws, expr);
 						return stmt;
 					}
 					else {
@@ -1175,7 +1156,7 @@ parse_stmt :: proc() -> ^Ast_Node {
 					}
 				}
 				case Ast_Subscript, Ast_Selector, Ast_Identifier: {
-					stmt := parse_assign_stmt(expr);
+					stmt := parse_assign_stmt(ws, expr);
 					return stmt;
 				}
 				case: {
@@ -1192,26 +1173,19 @@ parse_stmt :: proc() -> ^Ast_Node {
 	return nil;
 }
 
-parse_block :: proc(loc := #caller_location) -> ^Ast_Block {
+parse_block :: proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Block {
 	using Token_Type;
 
-	old_current_block := current_parsing_block;
 	curly := expect(Left_Curly);
-	current_parsing_block = node(curly, Ast_Block{{}, nil, nil});
 
-	assert(current_parsing_block != nil);
+	new_scope := node(ws, curly, Ast_Block{{}, nil, nil});
+	old_current_block := ws.current_scope;
+	ws.current_scope = new_scope;
+	defer ws.current_scope = old_current_block;
 
-	stmts := parse_stmt_list();
-	for stmt in stmts {
-		append(&current_parsing_block.stmts, stmt);
-		depend(current_parsing_block, stmt);
-	}
-
+	parse_stmt_list(ws);
 	expect(Right_Curly);
-	new_block := current_parsing_block;
-	current_parsing_block = old_current_block;
-
-	return new_block;
+	return new_scope;
 }
 
 site :: proc(the_site: Site) -> string {

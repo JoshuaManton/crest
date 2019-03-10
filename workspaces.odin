@@ -6,9 +6,10 @@ using import "core:fmt"
 using import "shared:workbench/logging"
 
 Workspace :: struct {
-	name:        string,
+	workspace_name: string,
 	output_file: string,
 	global_scope: ^Ast_Block,
+	current_scope: ^Ast_Block,
 
 	all_files: [dynamic]string,
 
