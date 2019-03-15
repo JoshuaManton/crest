@@ -93,7 +93,6 @@ depend :: inline proc(ws: ^Workspace, node: ^$T, depends_on: ^$S, loc := #caller
 	assert(node != nil, tprint("node was nil at ", pretty_location(loc)));
 	assert(depends_on != nil, tprint("depends_on was nil at ", pretty_location(loc)));
 	append(&node.depends, depends_on);
-	append(&ws.all_depends, Depend_Entry{node, depends_on});
 }
 
 unexpected_token :: proc(token: Token, loc: rt.Source_Code_Location, expected: ..Token_Type) {
