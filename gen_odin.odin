@@ -30,7 +30,11 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 	if canonical_type == type_float do return "f32";
 	if canonical_type == type_untyped_int do return "int";
 
+	#complete
 	switch kind in canonical_type.kind {
+		case Type_Primitive: {
+			return kind.name;
+		}
 		case Type_Struct: {
 			return kind.name;
 		}
@@ -46,6 +50,23 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 		case Type_Ptr: {
 			assert(kind.ptr_to != canonical_type);
 			return aprint("^", type_to_odin_string(kind.ptr_to));
+		}
+		case Type_Proc: {
+			str: strings.Builder;
+			sbprint(&str, "#type proc(");
+			comma := "";
+			for param in kind.params {
+				sbprint(&str, comma, type_to_odin_string(param.inferred_type));
+				comma = ", ";
+			}
+
+			sbprint(&str, ")");
+
+			if kind.return_type != nil {
+				sbprint(&str, " -> ", type_to_odin_string(kind.return_type));
+			}
+
+			return strings.to_string(str);
 		}
 		// @UnionTypes
 		// case Type_Union: {
@@ -146,13 +167,11 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 	return strings.to_string(buf);
 }
 
-print_var_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Var) {
-	assert(decl != nil);
-	type := decl.inferred_type;
+print_var_decl :: proc(output_code: ^[dynamic]u8, name: string, type: ^Type, expr: ^Ast_Node) {
 	assert(type != nil);
-	output(output_code, decl.name, ": ", type_to_odin_string(type));
-	if decl.expr != nil {
-		output(output_code, " = ", expr_to_string(decl.expr));
+	output(output_code, name, ": ", type_to_odin_string(type));
+	if expr != nil {
+		output(output_code, " = ", expr_to_string(expr));
 	}
 }
 
@@ -162,7 +181,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 	for _, idx in decl.fields {
 		field := decl.fields[idx];
 		indent(output_code);
-		print_var_decl(output_code, field);
+		print_var_decl(output_code, field.name, field.inferred_type, nil);
 		output(output_code, ",\n");
 	}
 	pop_indent();
@@ -181,7 +200,7 @@ print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 		param := decl.params[idx];
 		output(output_code, comma);
 		comma = ", ";
-		print_var_decl(output_code, param);
+		print_var_decl(output_code, param.name, param.inferred_type, param.expr);
 	}
 
 	output(output_code, ")");
@@ -314,7 +333,7 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 			print_return_stmt(output_code, kind);
 		}
 		case Ast_Var: {
-			print_var_decl(output_code, kind);
+			print_var_decl(output_code, kind.name, kind.inferred_type, kind.expr);
 			output(output_code, ";\n");
 		}
 		case Ast_Assign: {
@@ -376,6 +395,7 @@ using import "core:fmt"
 
 	output_code_buffer: [dynamic]u8;
 	output(&output_code_buffer, ODIN_PREAMBLE);
+
 	print_block(&output_code_buffer, workspace.global_scope);
 	output_code := cast(string)output_code_buffer[:];
 

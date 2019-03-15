@@ -7,86 +7,79 @@ using import "core:fmt"
 using import "shared:workbench/reflection"
 using import "shared:workbench/logging"
 
-Type_Ptr :: struct {
-	ptr_to: ^Type,
-}
-
-Type_Array :: struct {
-	length: uint,
-	array_of: ^Type,
-}
-
-Type_Dynamic_Array :: struct {
-	array_of: ^Type,
-}
-
-Type_Slice :: struct {
-	slice_of: ^Type,
-}
-
-// @UnionTypes
-// Type_Union :: struct {
-// 	types: [dynamic]^Type,
-// }
-
-Field :: struct {
-	name: string,
-	inferred_type: ^Type,
-}
-
-Type_Proc :: struct {
-	params: [dynamic]Field,
-	return_type: ^Type,
-}
-
-Type_Struct :: struct {
-	name: string,
-	fields: [dynamic]Field,
-}
-
-Type :: struct {
-	kind: union {
-		Type_Struct,
-		Type_Ptr,
-		Type_Array,
-		Type_Dynamic_Array,
-		Type_Slice,
-
-		// @UnionTypes
-		// Type_Union,
-
-		Type_Proc,
-	},
-	size: uint,
-}
-
-Depend_Entry :: struct {
-	node: ^Ast_Node,
-	depends_on: ^Ast_Node,
-}
-
-Check_State :: enum {
-	Unchecked,
-	// Checking,
-	Checked,
-}
-
 POINTER_SIZE :: 8;
 INT_SIZE :: 8;
 DYNAMIC_ARRAY_SIZE :: POINTER_SIZE + INT_SIZE + INT_SIZE;
 SLICE_SIZE :: POINTER_SIZE + INT_SIZE;
 
-type_int           := new_clone(Type{Type_Struct{"int", nil}, INT_SIZE});
-type_untyped_int   := new_clone(Type{Type_Struct{"untyped_int", nil}, 0});
-type_untyped_float := new_clone(Type{Type_Struct{"untyped_float", nil}, 0});
-type_float         := new_clone(Type{Type_Struct{"float", nil}, 4});
-type_bool          := new_clone(Type{Type_Struct{"bool", nil}, 1});
-type_string        := new_clone(Type{Type_Struct{"string", nil}, 16});
+type_i8:    ^Type;
+type_i16:   ^Type;
+type_i32:   ^Type;
+type_i64:   ^Type;
+type_int:   ^Type;
+
+type_u8:    ^Type;
+type_u16:   ^Type;
+type_u32:   ^Type;
+type_u64:   ^Type;
+type_uint:  ^Type;
+
+type_f32:   ^Type;
+type_f64:   ^Type;
+type_float: ^Type;
+
+type_bool: ^Type;
+
+type_string: ^Type;
+
+type_untyped_int:   ^Type = new_clone(Type{Type_Struct{"untyped_int",   nil}, 0});
+type_untyped_float: ^Type = new_clone(Type{Type_Struct{"untyped_float", nil}, 0});
 
 init_builtin_types :: proc(ws: ^Workspace) {
-	create_symbol(ws.global_scope, "int", type_int);
+	if type_i8 == nil {
+		type_i8  = make_type(ws, 1, Type_Primitive{"i8"});
+		type_i16 = make_type(ws, 2, Type_Primitive{"i16"});
+		type_i32 = make_type(ws, 4, Type_Primitive{"i32"});
+		type_i64 = make_type(ws, 8, Type_Primitive{"i64"});
+		type_int = type_i32;
+
+		type_u8  = make_type(ws, 1, Type_Primitive{"u8"});
+		type_u16 = make_type(ws, 2, Type_Primitive{"u16"});
+		type_u32 = make_type(ws, 4, Type_Primitive{"u32"});
+		type_u64 = make_type(ws, 8, Type_Primitive{"u64"});
+		type_int = type_u32;
+
+		type_f32 = make_type(ws, 4, Type_Primitive{"f32"});
+		type_f64 = make_type(ws, 8, Type_Primitive{"f64"});
+		type_float = type_f32;
+
+		type_bool = make_type(ws, 1, Type_Primitive{"bool"});
+
+		fields := [?]Field{
+			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
+			{"length", get_or_make_type_ptr_to(ws, type_int)},
+		};
+		type_string = make_type_struct(ws, "string", fields[:]);
+	}
+
+	create_symbol(ws.global_scope, "i8",    type_i8);
+	create_symbol(ws.global_scope, "i16",   type_i16);
+	create_symbol(ws.global_scope, "i32",   type_i32);
+	create_symbol(ws.global_scope, "i64",   type_i64);
+	create_symbol(ws.global_scope, "int",   type_int);
+
+	create_symbol(ws.global_scope, "u8",    type_u8);
+	create_symbol(ws.global_scope, "u16",   type_u16);
+	create_symbol(ws.global_scope, "u32",   type_u32);
+	create_symbol(ws.global_scope, "u64",   type_u64);
+	create_symbol(ws.global_scope, "uint",  type_uint);
+
+	create_symbol(ws.global_scope, "f32",   type_f32);
+	create_symbol(ws.global_scope, "f64",   type_f64);
 	create_symbol(ws.global_scope, "float", type_float);
-	create_symbol(ws.global_scope, "bool", type_bool);
+
+	create_symbol(ws.global_scope, "bool",   type_bool);
+
 	create_symbol(ws.global_scope, "string", type_string);
 }
 
@@ -345,7 +338,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Struct: {
-			t := make_struct_type(ws, kind);
+			fields: [dynamic]Field;
+			for field in kind.fields {
+				append(&fields, Field{field.name, field.inferred_type});
+			}
+			t := make_type_struct(ws, kind.name, fields[:]);
 			complete_node(node, t);
 			complete_sym(kind.sym, t);
 			return Check_Result.Ok;
@@ -606,25 +603,23 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 
 
 
-make_struct_type :: proc(using ws: ^Workspace, declaration: ^Ast_Struct, size_override : uint = 0) -> ^Type {
+make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
+	new_type := new(Type);
+	new_type.size = size;
+	new_type.kind = derived;
+	append(&ws.all_types, new_type);
+	return new_type;
+}
+
+make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type {
 	size : uint = 0;
-	fields: [dynamic]Field;
-	if size_override > 0 {
-		size = size_override;
-	}
-	else {
-		for _, idx in declaration.fields {
-			var := declaration.fields[idx];
-			var_node := var;
-			assert(var_node.inferred_type != nil);
-			append(&fields, Field{var.name, var_node.inferred_type});
-			size += var_node.inferred_type.size;
-		}
+	for var in fields {
+		assert(var.inferred_type != nil);
+		size += var.inferred_type.size;
 	}
 
-	assert(size != 0, aprintln(declaration^));
-	new_type := make_type(size, Type_Struct{declaration.name, fields});
-	append(&all_types, new_type);
+	assert(size != 0);
+	new_type := make_type(ws, size, Type_Struct{name, fields});
 	return new_type;
 }
 
@@ -656,8 +651,7 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 		append(&params, Field{param.name, t});
 	}
 
-	new_type := make_type(POINTER_SIZE, Type_Proc{params, declaration.return_type});
-	append(&all_types, new_type);
+	new_type := make_type(ws, POINTER_SIZE, Type_Proc{params[:], declaration.return_type});
 	return new_type;
 }
 
@@ -695,8 +689,7 @@ get_or_make_type_ptr_to :: proc(using ws: ^Workspace, ptr_to: ^Type) -> ^Type {
 		}
 	}
 
-	type_ptr := make_type(POINTER_SIZE, Type_Ptr{ptr_to});
-	append(&all_types, type_ptr);
+	type_ptr := make_type(ws, POINTER_SIZE, Type_Ptr{ptr_to});
 	return type_ptr;
 }
 
@@ -711,8 +704,7 @@ get_or_make_type_dynamic_array_of :: proc(using ws: ^Workspace, array_of: ^Type)
 		}
 	}
 
-	array_type := make_type(DYNAMIC_ARRAY_SIZE, Type_Dynamic_Array{array_of});
-	append(&all_types, array_type);
+	array_type := make_type(ws, DYNAMIC_ARRAY_SIZE, Type_Dynamic_Array{array_of});
 	return array_type;
 }
 
@@ -731,8 +723,7 @@ get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: 
 		}
 	}
 
-	array_type := make_type(length, Type_Array{length, array_of});
-	append(&all_types, array_type);
+	array_type := make_type(ws, length, Type_Array{length, array_of});
 	return array_type;
 }
 
@@ -747,8 +738,7 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 		}
 	}
 
-	type_slice := make_type(SLICE_SIZE, Type_Slice{slice_of});
-	append(&all_types, type_slice);
+	type_slice := make_type(ws, SLICE_SIZE, Type_Slice{slice_of});
 	return type_slice;
 }
 
@@ -778,19 +768,16 @@ error :: inline proc(base: ^Ast_Node, args: ..any) {
 
 
 
-make_type :: inline proc(size: uint, derived: $T, loc := #caller_location) -> ^Type {
-	new_type := new(Type);
-	new_type.size = size;
-	new_type.kind = derived;
 
-	return new_type;
-}
 
 type_to_string :: proc(canonical_type: ^Type) -> string {
 	if canonical_type == nil do return "<nil>";
 
 	#complete
 	switch kind in canonical_type.kind {
+		case Type_Primitive: {
+			return kind.name;
+		}
 		case Type_Struct: {
 			return kind.name;
 		}

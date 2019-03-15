@@ -20,13 +20,13 @@ using import "core:fmt"
 		print_float(sqr(3) * sqr(5));
 		//
 		{
-			some_ptr: ^int;
-			some_int: int = 4;
+			some_ptr: ^u32;
+			some_int: u32 = 4;
 			some_ptr = &some_int;
 		}
 		//
 		{
-			i: int = 10;
+			i: u32 = 10;
 			for i > 0 {
 				i -= 1;
 			}
