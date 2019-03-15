@@ -59,7 +59,7 @@ proc vector_proc(var v: Vector2) float {
 }
 
 proc print_string(var str: string) {
-	proc println(str: float) #odin;
+	proc println(str: string) #odin;
 	println(str);
 }
 

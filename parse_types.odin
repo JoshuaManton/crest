@@ -51,6 +51,8 @@ Ast_Proc :: struct {
 
 	return_type: ^Type,
 	sym: ^Symbol,
+
+	var_declarations: [dynamic]^Ast_Var,
 }
 
 Ast_Var :: struct {

@@ -662,7 +662,6 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 		depend(ws, procedure_stmt, p);
 	}
 
-
 	return procedure_stmt;
 }
 
@@ -832,7 +831,9 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 		case Var: {
 			var := parse_var_decl(ws);
 			expect(Semicolon);
-			// todo: this should be fine but not sure
+			if currently_parsing_procedure != nil {
+				append(&currently_parsing_procedure.var_declarations, var);
+			}
 			return var.base;
 		}
 		case Struct: {

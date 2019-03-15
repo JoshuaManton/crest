@@ -7,8 +7,9 @@ using import "core:fmt"
 using import "shared:workbench/reflection"
 using import "shared:workbench/logging"
 
+// todo(josh): these are goofy
+INT_SIZE :: 4;
 POINTER_SIZE :: 8;
-INT_SIZE :: 8;
 DYNAMIC_ARRAY_SIZE :: POINTER_SIZE + INT_SIZE + INT_SIZE;
 SLICE_SIZE :: POINTER_SIZE + INT_SIZE;
 
@@ -32,8 +33,8 @@ type_bool: ^Type;
 
 type_string: ^Type;
 
-type_untyped_int:   ^Type = new_clone(Type{Type_Struct{"untyped_int",   nil}, 0});
-type_untyped_float: ^Type = new_clone(Type{Type_Struct{"untyped_float", nil}, 0});
+type_untyped_int:   ^Type = new_clone(Type{Type_Primitive{"untyped_int"  }, 0});
+type_untyped_float: ^Type = new_clone(Type{Type_Primitive{"untyped_float"}, 0});
 
 init_builtin_types :: proc(ws: ^Workspace) {
 	if type_i8 == nil {
@@ -47,7 +48,7 @@ init_builtin_types :: proc(ws: ^Workspace) {
 		type_u16 = make_type(ws, 2, Type_Primitive{"u16"});
 		type_u32 = make_type(ws, 4, Type_Primitive{"u32"});
 		type_u64 = make_type(ws, 8, Type_Primitive{"u64"});
-		type_int = type_u32;
+		type_uint = type_u32;
 
 		type_f32 = make_type(ws, 4, Type_Primitive{"f32"});
 		type_f64 = make_type(ws, 8, Type_Primitive{"f64"});
@@ -57,7 +58,7 @@ init_builtin_types :: proc(ws: ^Workspace) {
 
 		fields := [?]Field{
 			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
-			{"length", get_or_make_type_ptr_to(ws, type_int)},
+			{"length", type_int},
 		};
 		type_string = make_type_struct(ws, "string", fields[:]);
 	}
@@ -208,7 +209,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Binary: {
 			using Token_Type;
 
-			if !ensure_is_assignable_to(kind.lhs.inferred_type, kind.rhs) do return Check_Result.Error;
+			if !is_assignable_to(kind.lhs.inferred_type, kind.rhs.inferred_type) && !is_assignable_to(kind.rhs.inferred_type, kind.lhs.inferred_type) {
+				type_mismatch(kind.lhs.inferred_type, kind.rhs);
+				return Check_Result.Error;
+			}
 
 			t: ^Type;
 			switch kind.op.kind {
@@ -569,10 +573,14 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 ensure_is_assignable_to :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) -> bool {
 	if !is_assignable_to(wanted, given.inferred_type, loc) {
-		error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.inferred_type));
+		type_mismatch(wanted, given);
 		return false;
 	}
 	return true;
+}
+
+type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node) {
+	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.inferred_type));
 }
 
 is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
@@ -584,9 +592,10 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	if wanted == given do return true;
 
 	//
-	if wanted == type_int   && given == type_untyped_int   do return true;
-	if wanted == type_float && given == type_untyped_int   do return true;
-	if wanted == type_float && given == type_untyped_float do return true;
+	if is_signed_integer_type(wanted) && given == type_untyped_int   do return true;
+
+	if is_float_type(wanted) && given == type_untyped_int   do return true;
+	if is_float_type(wanted) && given == type_untyped_float do return true;
 
 	//
 	// @UnionTypes
@@ -598,6 +607,20 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	// 	return false;
 	// }
 
+	return false;
+}
+
+is_signed_integer_type :: proc(t: ^Type) -> bool {
+	switch t {
+		case type_i8, type_i16, type_i32, type_i64: return true;
+	}
+	return false;
+}
+
+is_float_type :: proc(t: ^Type) -> bool {
+	switch t {
+		case type_f32, type_f64: return true;
+	}
 	return false;
 }
 
