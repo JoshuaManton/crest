@@ -30,4 +30,6 @@ Workspace :: struct {
 	unresolved_identifiers: [dynamic]^Ast_Identifier,
 	nodes_to_typecheck: [dynamic]^Ast_Node,
 	all_types: [dynamic]^Type,
+	all_procedures: [dynamic]^Ast_Proc,
 }
+

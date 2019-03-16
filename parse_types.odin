@@ -53,6 +53,7 @@ Ast_Proc :: struct {
 	sym: ^Symbol,
 
 	var_declarations: [dynamic]^Ast_Var,
+	output_name: string,
 }
 
 Ast_Var :: struct {

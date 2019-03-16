@@ -647,6 +647,13 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	procedure_stmt.block = block;
 	procedure_stmt.sym = decl;
 
+	if currently_parsing_procedure.parent == ws.global_scope {
+		procedure_stmt.output_name = name;
+	}
+	else {
+		procedure_stmt.output_name = aprint(name, procedure_stmt.base.serial);
+	}
+
 	if return_type != nil {
 		depend(ws, procedure_stmt, return_type);
 	}
@@ -660,6 +667,8 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	for p in params {
 		depend(ws, procedure_stmt, p);
 	}
+
+	append(&ws.all_procedures, procedure_stmt);
 
 	return procedure_stmt;
 }

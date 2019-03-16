@@ -36,7 +36,7 @@ type_string: ^Type;
 type_untyped_int:   ^Type = new_clone(Type{Type_Primitive{"untyped_int"  }, 0});
 type_untyped_float: ^Type = new_clone(Type{Type_Primitive{"untyped_float"}, 0});
 
-init_builtin_types :: proc(ws: ^Workspace) {
+init_builtin_types :: proc(using ws: ^Workspace) {
 	if type_i8 == nil {
 		type_i8  = make_type(ws, 1, Type_Primitive{"i8"});
 		type_i16 = make_type(ws, 2, Type_Primitive{"i16"});
