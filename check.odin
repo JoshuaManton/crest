@@ -431,6 +431,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			return .Ok;
 		}
 
+		case Ast_Directive_Include: {
+			node.check_state = Check_State.Checked;
+			return .Ok;
+		}
+
 		case Ast_Block: {
 			node.check_state = Check_State.Checked;
 			return .Ok;
@@ -461,7 +466,8 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				true_type = expr_type;
 			}
 			else {
-				assert(false, "no declared type or expr to infer type from");
+				error(node, "Either a type or value is required for a variable declaraion.");
+				return .Error;
 			}
 
 			if true_type == type_untyped_int   do true_type = type_int;
@@ -580,7 +586,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				}
 				case: {
 					error(kind.array, "Cannot slice type: ", type_to_string(array_type));
-					assert(false);
+					return .Error;
 				}
 			}
 			slice_type := get_or_make_type_slice_of(ws, array_of);
@@ -705,11 +711,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// }
 
 		case Ast_Comment: {
-			node.check_state = Check_State.Checked;
-			return .Ok;
-		}
-
-		case Ast_Directive_Include: {
 			node.check_state = Check_State.Checked;
 			return .Ok;
 		}
@@ -1004,7 +1005,7 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 		}
 	}
 
-	assert(false);
+	unreachable();
 	return "";
 }
 

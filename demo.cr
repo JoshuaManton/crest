@@ -24,10 +24,10 @@ proc variables() {
 }
 
 proc constants() {
-	const HENLO = "Henlo, ";
+	const HENLO = "Henlo ";
 	const WORLD = "World!";
 	const HENLO_WORLD = HENLO + WORLD;
-	#assert HENLO_WORLD == "Henlo, World!"
+	#assert HENLO_WORLD == "Henlo World!"
 }
 
 proc loops() {
@@ -53,7 +53,8 @@ proc structs() {
 }
 
 proc arrays() {
-	var arr: [16]float;
+	const N = 16;
+	var arr: [N]float;
 	arr[2] = 123;
 	print_float(arr[0]);
 	print_float(arr[2]);

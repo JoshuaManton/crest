@@ -51,7 +51,7 @@ variables :: proc() {
 
 // demo.cr(26:1)
 constants :: proc() {
-	HENLO: string : "Henlo, ";
+	HENLO: string : "Henlo ";
 	WORLD: string : "World!";
 	HENLO_WORLD: string : HENLO + WORLD;
 }
@@ -84,6 +84,7 @@ structs :: proc() {
 
 // demo.cr(55:1)
 arrays :: proc() {
+	N: i32 : 16;
 	arr: [16]f32;
 	arr[2] = 123;
 	print_float(arr[0]);

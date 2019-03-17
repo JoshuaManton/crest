@@ -10,13 +10,13 @@ main :: proc() {
 
 	parse_ok := parse_workspace(&workspace, os.args[1]);
 	if !parse_ok {
-		logln("There were errors, exiting.");
+		println("There were errors, exiting.");
 		return;
 	}
 
 	check_ok := typecheck_workspace(&workspace);
 	if !check_ok {
-		logln("There were errors, exiting.");
+		println("There were errors, exiting.");
 		return;
 	}
 

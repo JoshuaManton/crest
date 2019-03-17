@@ -390,7 +390,6 @@ next_token :: proc(loc := #caller_location) -> Token {
 
 				inc();
 				token_text = program_text[start:lex_idx];
-				logln("'", token_text, "'");
 			}
 			else {
 				token_type = Divide;
