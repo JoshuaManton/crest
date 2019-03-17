@@ -56,6 +56,7 @@ Token_Type :: enum {
 	Multiply,
 	Divide,
 	Mod,
+	Mod_Mod,
 	And,
 	LShift,
 	RShift,
@@ -408,6 +409,11 @@ next_token :: proc(loc := #caller_location) -> Token {
 				inc();
 				token_type = Mod_Assign;
 				token_text = "%=";
+			}
+			else if program_text[lex_idx+1] == '%' {
+				inc();
+				token_type = Mod_Mod;
+				token_text = "%%";
 			}
 		}
 		case '^': {

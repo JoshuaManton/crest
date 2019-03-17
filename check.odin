@@ -311,6 +311,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						case Multiply: value = lhs_value * rhs_value;
 						case Divide:   value = lhs_value / rhs_value;
 						case Mod:      value = lhs_value % rhs_value;
+						case Mod_Mod:  value = lhs_value %% rhs_value;
 						case And:      value = lhs_value & rhs_value;
 						case Or:       value = lhs_value | rhs_value;
 						case Xor:      value = lhs_value ~ rhs_value;
