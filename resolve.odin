@@ -3,6 +3,7 @@ package crest
 Symbol :: struct {
 	name: string,
 	inferred_type: ^Type,
+	constant_value: Constant_Value,
 }
 
 resolve_identifiers :: proc(ws: ^Workspace) -> bool {
@@ -33,7 +34,7 @@ try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
 
 create_symbol :: proc(block: ^Ast_Block, name: string, inferred_type : ^Type = nil, loc := #caller_location) -> ^Symbol {
 	assert(block != nil);
-	decl := new_clone(Symbol{name, inferred_type});
+	decl := new_clone(Symbol{name, inferred_type, nil});
 	append(&block.symbols, decl);
 	return decl;
 }

@@ -35,6 +35,10 @@ Ast_Directive_Include :: struct {
 	using base: ^Ast_Node,
 	filename: string,
 }
+Ast_Directive_Assert :: struct {
+	using base: ^Ast_Node,
+	condition: ^Ast_Node,
+}
 
 Ast_Comment :: struct {
 	using base: ^Ast_Node,
@@ -62,6 +66,7 @@ Ast_Var :: struct {
 	typespec: ^Ast_Node,
 	expr: ^Ast_Node,
 	sym: ^Symbol,
+	is_constant: bool,
 }
 
 Ast_Struct :: struct {
@@ -195,9 +200,7 @@ Ast_String :: struct {
 
 Ast_Number :: struct {
 	using base: ^Ast_Node,
-	is_float: bool,
-	int_number: i64,
-	float_number: f64,
+	value: union{i64, f64},
 }
 
 Ast_Null :: struct {
@@ -207,6 +210,7 @@ Ast_Null :: struct {
 Ast_Node :: struct {
 	derived: union {
 		Ast_Directive_Include,
+		Ast_Directive_Assert,
 		Ast_Struct,
 		Ast_Proc,
 		Ast_Var,
@@ -244,16 +248,32 @@ Ast_Node :: struct {
 	},
 
 	serial: int,
-	site: Site,
 	parent: ^Ast_Block,
 	root_token: Token,
 	check_state: Check_State,
 	depends: [dynamic]^Ast_Node,
 	inferred_type: ^Type,
+	constant_value: Constant_Value,
 }
+
+Constant_Value :: union {
+	i64,
+	f64,
+	bool,
+	string,
+}
+
+
 
 Site :: struct {
 	filename: string,
 	line: int,
 	column: int,
+}
+
+
+
+Procedure_Directive_Mapping :: struct {
+	directive: string,
+	bit:       u32, // usage: `proc_flags |= 1 << bit`
 }

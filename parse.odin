@@ -6,8 +6,6 @@ using import "core:fmt"
 
 using import "shared:workbench/logging"
 
-PROC_IS_ODIN_PROC : u32 : 1 << 0;
-
 parse_workspace :: proc(ws: ^Workspace, filename: string) -> bool {
 	assert(ws != nil);
 
@@ -69,10 +67,10 @@ _alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #ca
 	ptr^ = Ast_Node{
 		derived,
 		last_serial,
-		token.site,
 		ws.current_scope,
 		token,
 		Check_State.Unchecked,
+		nil,
 		nil,
 		nil,
 	};
@@ -244,7 +242,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 			return slice.base;
 		}
 
-		if peek().kind == Range {
+		if peek().kind == Dot_Dot {
 			next_token();
 			expect(Right_Square);
 			typespec := parse_typespec(ws);
@@ -255,7 +253,10 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 
 		array_length_expr := parse_expr(ws);
 		expect(Right_Square);
+
 		typespec := parse_typespec(ws);
+		depend(ws, typespec, array_length_expr);
+
 		array := node(ws, token, Ast_Typespec_Array{{}, array_length_expr, typespec});
 		depend(ws, array, typespec);
 		return array.base;
@@ -280,11 +281,11 @@ parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 			return expr.base;
 		}
 		case Integer_Literal: {
-			num := node(ws, token, Ast_Number{{}, false, strconv.parse_i64(token.text), 0});
+			num := node(ws, token, Ast_Number{{}, strconv.parse_i64(token.text)});
 			return num.base;
 		}
 		case Float_Literal: {
-			num := node(ws, token, Ast_Number{{}, true, 0, strconv.parse_f64(token.text)});
+			num := node(ws, token, Ast_Number{{}, strconv.parse_f64(token.text)});
 			return num.base;
 		}
 		case String_Literal: {
@@ -359,11 +360,11 @@ parse_base_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 			case Left_Square: {
 				expression: ^Ast_Node;
 
-				if !is_token(Range) {
+				if !is_token(Dot_Dot) {
 					expression = parse_expr(ws);
 				}
 
-				if is_token(Range) {
+				if is_token(Dot_Dot) {
 					next_token();
 
 					min := expression;
@@ -533,7 +534,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false});
 	}
 
 	if is_token(Colon) {
@@ -553,7 +554,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -569,7 +570,7 @@ try_parse_directive :: proc(ws: ^Workspace) -> ^Ast_Directive {
 
 	token := peek();
 	switch token.kind {
-		case Directive_Odin: {
+		case Directive_Odin_Proc: {
 			directive := next_token();
 			return node(ws, directive, Ast_Directive{{}, directive.text});
 		}
@@ -580,6 +581,8 @@ try_parse_directive :: proc(ws: ^Workspace) -> ^Ast_Directive {
 }
 
 currently_parsing_procedure: ^Ast_Proc;
+
+PROC_IS_ODIN_PROC : u32 : 1 << 0;
 
 try_parse_proc_directives :: proc(ws: ^Workspace) -> u32 {
 	flags: u32;
@@ -615,6 +618,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	for !is_token(Right_Paren) {
 		param := parse_var_decl(ws, false);
 		append(&params, param);
+		depend(ws, procedure_stmt, param);
 
 		if is_token(Comma) {
 			next_token();
@@ -663,11 +667,6 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	// 	depend(ws, procedure_stmt, block);
 	// }
 
-	// todo: factor into loop above
-	for p in params {
-		depend(ws, procedure_stmt, p);
-	}
-
 	append(&ws.all_procedures, procedure_stmt);
 
 	return procedure_stmt;
@@ -699,7 +698,7 @@ parse_range_or_single_expr :: proc(ws: ^Workspace) -> (^Ast_Node, bool) {
 
 	token := peek();
 	expr1 := parse_expr(ws);
-	if is_token(Range) {
+	if is_token(Dot_Dot) {
 		next_token();
 		expr2 := parse_expr(ws);
 		node := node(ws, token, Ast_Range{{}, nil, expr1, expr2});
@@ -828,6 +827,13 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			filename := expect(String_Literal);
 			return node(ws, directive, Ast_Directive_Include{{}, filename.text}).base;
 		}
+		case Directive_Assert: {
+			directive := expect(Directive_Assert);
+			condition := parse_expr(ws);
+			n := node(ws, directive, Ast_Directive_Assert{{}, condition}).base;
+			depend(ws, n, condition);
+			return n;
+		}
 		case Left_Curly: {
 			block := parse_block(ws);
 			return block.base;
@@ -841,6 +847,18 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			expect(Semicolon);
 			if currently_parsing_procedure != nil {
 				append(&currently_parsing_procedure.var_declarations, var);
+			}
+			return var.base;
+		}
+		case Const: {
+			const_token := next_token();
+			var := parse_var_decl(ws, false);
+			var.base.root_token = const_token;
+			expect(Semicolon);
+			var.is_constant = true;
+			if var.expr == nil {
+				error(var.base, "Constants must be defined with an expression.");
+				assert(false); // todo(josh): error handling in parser code
 			}
 			return var.base;
 		}

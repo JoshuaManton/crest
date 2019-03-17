@@ -11,12 +11,12 @@ newline   :: proc(output_code: ^[dynamic]u8) do output(output_code, "\n");
 
 indent_level := 0;
 indent :: proc(output_code: ^[dynamic]u8) {
-	for i in 0..indent_level {
+	for i in 0..indent_level-1 {
 		output(output_code, "\t");
 	}
 }
-push_indent :: proc() do indent_level += 1;
-pop_indent  :: proc() do indent_level -= 1;
+push_indent :: proc(loc := #caller_location) do indent_level += 1;
+pop_indent  :: proc(loc := #caller_location) do indent_level -= 1;
 
 output :: inline proc(output_code: ^[dynamic]u8, strings: ..string) {
 	for str in strings {
@@ -109,11 +109,10 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 		}
 
 		case Ast_Number: {
-			if kind.is_float {
-				sbprint(&buf, kind.float_number);
-			}
-			else {
-				sbprint(&buf, kind.int_number);
+			#complete
+			switch value in kind.value {
+				case f64: sbprint(&buf, value);
+				case i64: sbprint(&buf, value);
 			}
 		}
 
@@ -167,11 +166,16 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 	return strings.to_string(buf);
 }
 
-print_var_decl :: proc(output_code: ^[dynamic]u8, name: string, type: ^Type, expr: ^Ast_Node) {
+print_var_decl :: proc(output_code: ^[dynamic]u8, name: string, type: ^Type, expr: ^Ast_Node, is_constant: bool = false) {
 	assert(type != nil);
 	output(output_code, name, ": ", type_to_odin_string(type));
 	if expr != nil {
-		output(output_code, " = ", expr_to_string(expr));
+		if is_constant {
+			output(output_code, " : ", expr_to_string(expr));
+		}
+		else {
+			output(output_code, " = ", expr_to_string(expr));
+		}
 	}
 }
 
@@ -191,6 +195,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 	if decl.flags & PROC_IS_ODIN_PROC > 0 {
+		output(output_code, "// #odin proc ", decl.name, "\n");
 		return;
 	}
 
@@ -210,8 +215,15 @@ print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 	}
 
 	output(output_code, " ");
-	print_block(output_code, decl.block);
+	if decl.block != nil {
+		print_block(output_code, decl.block);
+	}
 	output(output_code, "\n");
+}
+
+print_site :: proc(output_code: ^[dynamic]u8, s: Site) {
+	output(output_code, "// ", site(s), "\n");
+	indent(output_code);
 }
 
 print_while_loop :: proc(output_code: ^[dynamic]u8, loop: ^Ast_While) {
@@ -317,9 +329,11 @@ print_call :: proc(output_code: ^[dynamic]u8, call: ^Ast_Call) {
 print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 	switch kind in &stmt.derived {
 		case Ast_Struct: {
+			print_site(output_code, stmt.root_token.site);
 			print_struct_decl(output_code, kind);
 		}
 		case Ast_Proc: {
+			print_site(output_code, stmt.root_token.site);
 			print_proc_decl(output_code, kind);
 		}
 		case Ast_Call: {
@@ -333,7 +347,7 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 			print_return_stmt(output_code, kind);
 		}
 		case Ast_Var: {
-			print_var_decl(output_code, kind.name, kind.inferred_type, kind.expr);
+			print_var_decl(output_code, kind.name, kind.inferred_type, kind.expr, kind.is_constant);
 			output(output_code, ";\n");
 		}
 		case Ast_Assign: {
@@ -351,6 +365,7 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 		case Ast_Comment: {
 			output(output_code, kind.text, "\n");
 		}
+
 		case: {
 			logln("Unhandled case in print_stmt(): ", kind^);
 		}
@@ -371,8 +386,22 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 	}
 
 	for _, idx in block.stmts {
-		indent(output_code);
 		stmt := block.stmts[idx];
+
+		// skip certain things
+		{
+			switch kind in stmt.derived {
+			case Ast_Directive_Assert: {
+				continue;
+			}
+			case Ast_Proc: {
+				if kind.flags & PROC_IS_ODIN_PROC > 0 do continue;
+			}
+			}
+		}
+
+
+		indent(output_code);
 		assert(stmt != nil);
 		print_stmt(output_code, stmt);
 	}

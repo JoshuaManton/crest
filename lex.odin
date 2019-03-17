@@ -38,8 +38,9 @@ Token_Type :: enum {
 	Case,
 
 	// Directives
-	Directive_Odin,
+	Directive_Odin_Proc,
 	Directive_Include,
+	Directive_Assert,
 
 	BUILTIN_TYPES_BEGIN,
 	Void,
@@ -91,7 +92,7 @@ Token_Type :: enum {
 	Not,
 
 	// ..
-	Range,
+	Dot_Dot,
 
 	ASSIGN_BEGIN,
 	Assign,
@@ -252,8 +253,9 @@ next_token :: proc(loc := #caller_location) -> Token {
 
 			token_text = program_text[start:lex_idx+1];
 			switch token_text {
-				case "#odin":    token_type = Directive_Odin;
+				case "#odin":    token_type = Directive_Odin_Proc;
 				case "#include": token_type = Directive_Include;
+				case "#assert":  token_type = Directive_Assert;
 				case: {
 					logln("Invalid hash directive: ", token_text);
 					return Token{};
@@ -301,7 +303,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 			token_text = ".";
 			if program_text[lex_idx+1] == '.' {
 				inc();
-				token_type = Range;
+				token_type = Dot_Dot;
 				token_text = "..";
 			}
 		}
