@@ -28,7 +28,7 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 	assert(canonical_type != nil, aprintln(loc));
 
 	if canonical_type == type_float do return "f32";
-	if canonical_type == type_untyped_int do return "int";
+	if canonical_type == type_untyped_int do return "i32";
 
 	#complete
 	switch kind in canonical_type.kind {
