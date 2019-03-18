@@ -55,6 +55,7 @@ Type :: struct {
 
 		Type_Proc,
 	},
+	id:   uint,
 	size: uint,
 }
 

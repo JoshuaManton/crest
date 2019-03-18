@@ -33,55 +33,42 @@ type_bool: ^Type;
 
 type_string: ^Type;
 
-type_untyped_int:   ^Type = new_clone(Type{Type_Primitive{"untyped_int"  }, 0});
-type_untyped_float: ^Type = new_clone(Type{Type_Primitive{"untyped_float"}, 0});
+type_typeid: ^Type;
+
+type_untyped_int:   ^Type;
+type_untyped_float: ^Type;
 
 init_builtin_types :: proc(using ws: ^Workspace) {
 	if type_i8 == nil {
-		type_i8  = make_type(ws, 1, Type_Primitive{"i8"});
-		type_i16 = make_type(ws, 2, Type_Primitive{"i16"});
-		type_i32 = make_type(ws, 4, Type_Primitive{"i32"});
-		type_i64 = make_type(ws, 8, Type_Primitive{"i64"});
-		type_int = make_type_distinct(ws, "int", type_i32);
+		type_i8  = make_type(ws, 1, Type_Primitive{"i8"});  create_symbol(ws.global_scope, "i8",    type_i8);
+		type_i16 = make_type(ws, 2, Type_Primitive{"i16"}); create_symbol(ws.global_scope, "i16",   type_i16);
+		type_i32 = make_type(ws, 4, Type_Primitive{"i32"}); create_symbol(ws.global_scope, "i32",   type_i32);
+		type_i64 = make_type(ws, 8, Type_Primitive{"i64"}); create_symbol(ws.global_scope, "i64",   type_i64);
+		type_int = make_type_distinct(ws, "int", type_i32); create_symbol(ws.global_scope, "int",   type_int);
 
-		type_u8   = make_type(ws, 1, Type_Primitive{"u8"});
-		type_u16  = make_type(ws, 2, Type_Primitive{"u16"});
-		type_u32  = make_type(ws, 4, Type_Primitive{"u32"});
-		type_u64  = make_type(ws, 8, Type_Primitive{"u64"});
-		type_uint = make_type_distinct(ws, "uint", type_u32);
+		type_u8   = make_type(ws, 1, Type_Primitive{"u8"});   create_symbol(ws.global_scope, "u8",    type_u8);
+		type_u16  = make_type(ws, 2, Type_Primitive{"u16"});  create_symbol(ws.global_scope, "u16",   type_u16);
+		type_u32  = make_type(ws, 4, Type_Primitive{"u32"});  create_symbol(ws.global_scope, "u32",   type_u32);
+		type_u64  = make_type(ws, 8, Type_Primitive{"u64"});  create_symbol(ws.global_scope, "u64",   type_u64);
+		type_uint = make_type_distinct(ws, "uint", type_u32); create_symbol(ws.global_scope, "uint",  type_uint);
 
-		type_f32   = make_type(ws, 4, Type_Primitive{"f32"});
-		type_f64   = make_type(ws, 8, Type_Primitive{"f64"});
-		type_float = make_type_distinct(ws, "float", type_f32);;
+		type_f32   = make_type(ws, 4, Type_Primitive{"f32"});   create_symbol(ws.global_scope, "f32",   type_f32);
+		type_f64   = make_type(ws, 8, Type_Primitive{"f64"});   create_symbol(ws.global_scope, "f64",   type_f64);
+		type_float = make_type_distinct(ws, "float", type_f32); create_symbol(ws.global_scope, "float", type_float);
 
-		type_bool = make_type(ws, 1, Type_Primitive{"bool"});
+		type_bool = make_type(ws, 1, Type_Primitive{"bool"}); create_symbol(ws.global_scope, "bool",   type_bool);
 
 		fields := [?]Field{
 			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
 			{"length", type_int},
 		};
-		type_string = make_type_struct(ws, "string", fields[:]);
+		type_string = make_type_struct(ws, "string", fields[:]); create_symbol(ws.global_scope, "string", type_string);
+
+		type_typeid = make_type_distinct(ws, "type_id", type_i32); create_symbol(ws.global_scope, "type_id", type_int);
+
+		type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
+		type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
 	}
-
-	create_symbol(ws.global_scope, "i8",    type_i8);
-	create_symbol(ws.global_scope, "i16",   type_i16);
-	create_symbol(ws.global_scope, "i32",   type_i32);
-	create_symbol(ws.global_scope, "i64",   type_i64);
-	create_symbol(ws.global_scope, "int",   type_int);
-
-	create_symbol(ws.global_scope, "u8",    type_u8);
-	create_symbol(ws.global_scope, "u16",   type_u16);
-	create_symbol(ws.global_scope, "u32",   type_u32);
-	create_symbol(ws.global_scope, "u64",   type_u64);
-	create_symbol(ws.global_scope, "uint",  type_uint);
-
-	create_symbol(ws.global_scope, "f32",   type_f32);
-	create_symbol(ws.global_scope, "f64",   type_f64);
-	create_symbol(ws.global_scope, "float", type_float);
-
-	create_symbol(ws.global_scope, "bool",   type_bool);
-
-	create_symbol(ws.global_scope, "string", type_string);
 }
 
 typecheck_workspace :: proc(ws: ^Workspace) -> bool {
@@ -225,7 +212,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 
 			if kind.lhs.constant_value != nil && kind.rhs.constant_value != nil {
-				value := evaluate_constant_value(kind.op.kind, kind.lhs.constant_value, kind.rhs.constant_value);
+				value := evaluate_constant_value(kind.op.kind, kind.lhs.constant_value, kind.rhs.constant_value, kind.lhs.root_token.site);
 				if value == nil {
 					// todo(josh): better error message here?
 					type_mismatch(ltype, kind.rhs);
@@ -233,7 +220,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				}
 				node.constant_value = value;
 
-				evaluate_constant_value :: proc(op: Token_Type, a: Constant_Value, b: Constant_Value) -> Constant_Value {
+				evaluate_constant_value :: proc(op: Token_Type, a: Constant_Value, b: Constant_Value, op_site: Site) -> Constant_Value {
 					assert(a != nil);
 					assert(b != nil);
 
@@ -796,6 +783,7 @@ is_pointer_type :: proc(t: ^Type) -> bool {
 
 make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
 	new_type := new(Type);
+	new_type.id = cast(uint)len(ws.all_types)+1;
 	new_type.size = size;
 	new_type.kind = derived;
 	append(&ws.all_types, new_type);
@@ -960,11 +948,21 @@ complete_sym :: inline proc(sym: ^Symbol, t: ^Type) {
 
 
 
-error :: inline proc(base: ^Ast_Node, args: ..any) {
-	print(site(base.root_token.site), " ");
+error :: proc{node_error, site_error};
+node_error :: proc(base: ^Ast_Node, args: ..any) {
+	site_error(base.root_token.site, args);
+}
+
+site_error :: proc(site_var: Site, args: ..any) {
+	print(site(site_var), " ");
 	print(..args);
 	print("\n");
 }
+
+
+
+
+
 
 
 
