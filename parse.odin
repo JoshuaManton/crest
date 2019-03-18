@@ -144,11 +144,7 @@ is_assign_op :: proc() -> bool {
 is_postfix_op :: proc() -> bool {
 	using Token_Type;
 
-	switch peek().kind {
-		case Dot, Left_Paren, Left_Square: {
-			return true;
-		}
-	}
+	if is_token(Dot, Left_Paren, Left_Square) do return true;
 
 	return false;
 }
@@ -635,7 +631,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	}
 
 	block: ^Ast_Block;
-	if peek().kind != Semicolon {
+	if !is_token(Semicolon) {
 		block = parse_block(ws);
 	}
 	else {
@@ -672,25 +668,33 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 	return procedure_stmt;
 }
 
-parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Struct {
-	using Token_Type;
+parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Node {
+	struct_token := expect(Token_Type.Type_Keyword);
+	name_token := expect(Token_Type.Ident);
+	decl := create_symbol(ws.current_scope, name_token.text, nil);
 
-	struct_token := expect(Struct);
-	name_token := expect(Ident);
+	n: ^Ast_Node;
 
-	fields: [dynamic]^Ast_Var;
-	block := parse_block(ws);
-	field_stmts := block.stmts;
-	for _, idx in field_stmts {
-		field := &field_stmts[idx].derived.(Ast_Var);
-		append(&fields, field);
+	if is_token(Token_Type.Left_Curly) {
+		fields: [dynamic]^Ast_Var;
+		block := parse_block(ws);
+		field_stmts := block.stmts;
+		for _, idx in field_stmts {
+			field := &field_stmts[idx].derived.(Ast_Var);
+			append(&fields, field);
+		}
+
+		n = node(ws, struct_token, Ast_Struct{{}, name_token.text, fields[:], decl});
+		depend(ws, n, block);
+	}
+	else {
+		other_type := parse_typespec(ws);
+		n = node(ws, struct_token, Ast_Typedef{{}, name_token.text, other_type, decl});
+		depend(ws, n, other_type);
+		expect(Token_Type.Semicolon);
 	}
 
-	decl := create_symbol(ws.current_scope, name_token.text, nil);
-	s := node(ws, struct_token, Ast_Struct{{}, name_token.text, fields[:], decl});
-
-	depend(ws, s, block);
-	return s;
+	return n;
 }
 
 parse_range_or_single_expr :: proc(ws: ^Workspace) -> (^Ast_Node, bool) {
@@ -818,31 +822,31 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 
 	token := peek();
 	switch (token.kind) {
-		case Comment: {
+		case .Comment: {
 			comment := next_token();
 			return node(ws, comment, Ast_Comment{{}, comment.text}).base;
 		}
-		case Directive_Include: {
+		case .Directive_Include: {
 			directive := expect(Directive_Include);
 			filename := expect(String_Literal);
 			return node(ws, directive, Ast_Directive_Include{{}, filename.text}).base;
 		}
-		case Directive_Assert: {
+		case .Directive_Assert: {
 			directive := expect(Directive_Assert);
 			condition := parse_expr(ws);
 			n := node(ws, directive, Ast_Directive_Assert{{}, condition}).base;
 			depend(ws, n, condition);
 			return n;
 		}
-		case Left_Curly: {
+		case .Left_Curly: {
 			block := parse_block(ws);
 			return block.base;
 		}
-		case Proc: {
+		case .Proc: {
 			decl := parse_proc_decl(ws);
 			return decl.base;
 		}
-		case Var: {
+		case .Var: {
 			var := parse_var_decl(ws);
 			expect(Semicolon);
 			if currently_parsing_procedure != nil {
@@ -850,7 +854,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			}
 			return var.base;
 		}
-		case Const: {
+		case .Const: {
 			const_token := next_token();
 			var := parse_var_decl(ws, false);
 			var.base.root_token = const_token;
@@ -862,23 +866,23 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			}
 			return var.base;
 		}
-		case Struct: {
+		case .Type_Keyword: {
 			s := parse_struct_decl(ws);
-			return s.base;
+			return s;
 		}
-		case Switch: {
+		case .Switch: {
 			assert(false);
 			return nil;
 		}
-		case For, While: {
+		case .For, While: {
 			loop := parse_loop(ws);
 			return loop;
 		}
-		case If: {
+		case .If: {
 			i := parse_if_stmt(ws);
 			return i.base;
 		}
-		case Return: {
+		case .Return: {
 			ret_token := next_token();
 			expr := parse_expr(ws);
 			assert(currently_parsing_procedure != nil);

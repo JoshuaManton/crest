@@ -3,7 +3,7 @@ package output
 using import "core:fmt"
 
 // print.cr(1:1)
-print :: proc(str: string) {
+print_string :: proc(str: string) {
 	println(str);
 }
 
@@ -80,9 +80,15 @@ structs :: proc() {
 	vec: Vector2;
 	vec.x = 3;
 	vec.y = vector_proc(vec);
+	// demo.cr(54:5)
+	Other_Vector2 :: distinct Vector2;
+	other: Other_Vector2;
+	other.x = 4;
+	other.y = 7;
+	// other = vec; <- type mismatch
 }
 
-// demo.cr(55:1)
+// demo.cr(61:1)
 arrays :: proc() {
 	N: i32 : 16;
 	arr: [16]f32;

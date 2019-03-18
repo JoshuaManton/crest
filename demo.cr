@@ -38,7 +38,7 @@ proc loops() {
 }
 
 proc structs() {
-	struct Vector2 {
+	type Vector2 {
 		var x: float;
 		var y: float;
 	}
@@ -50,6 +50,12 @@ proc structs() {
 	var vec: Vector2;
 	vec.x = 3;
 	vec.y = vector_proc(vec);
+
+	type Other_Vector2 Vector2;
+	var other: Other_Vector2;
+	other.x = 4;
+	other.y = 7;
+	// other = vec; <- type mismatch
 }
 
 proc arrays() {

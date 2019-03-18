@@ -4,5 +4,5 @@ const Hello = "Hello, ";
 const World = "World!";
 
 proc main() {
-	print(Hello + World);
+	print_string(Hello + World);
 }

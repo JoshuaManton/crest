@@ -27,7 +27,7 @@ output :: inline proc(output_code: ^[dynamic]u8, strings: ..string) {
 type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> string {
 	assert(canonical_type != nil, aprintln(loc));
 
-	if canonical_type == type_float do return "f32";
+	if canonical_type == type_float       do return "f32";
 	if canonical_type == type_untyped_int do return "i32";
 
 	#complete
@@ -193,6 +193,10 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 	output(output_code, "}\n\n");
 }
 
+print_typedef :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Typedef) {
+	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.inferred_type), ";\n");
+}
+
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 	if decl.flags & PROC_IS_ODIN_PROC > 0 {
 		output(output_code, "// #odin proc ", decl.name, "\n");
@@ -335,6 +339,10 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 		case Ast_Proc: {
 			print_site(output_code, stmt.root_token.site);
 			print_proc_decl(output_code, kind);
+		}
+		case Ast_Typedef: {
+			print_site(output_code, stmt.root_token.site);
+			print_typedef(output_code, kind);
 		}
 		case Ast_Call: {
 			print_call(output_code, kind);

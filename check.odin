@@ -42,17 +42,17 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		type_i16 = make_type(ws, 2, Type_Primitive{"i16"});
 		type_i32 = make_type(ws, 4, Type_Primitive{"i32"});
 		type_i64 = make_type(ws, 8, Type_Primitive{"i64"});
-		type_int = type_i32;
+		type_int = make_type_distinct(ws, "int", type_i32);
 
-		type_u8  = make_type(ws, 1, Type_Primitive{"u8"});
-		type_u16 = make_type(ws, 2, Type_Primitive{"u16"});
-		type_u32 = make_type(ws, 4, Type_Primitive{"u32"});
-		type_u64 = make_type(ws, 8, Type_Primitive{"u64"});
-		type_uint = type_u32;
+		type_u8   = make_type(ws, 1, Type_Primitive{"u8"});
+		type_u16  = make_type(ws, 2, Type_Primitive{"u16"});
+		type_u32  = make_type(ws, 4, Type_Primitive{"u32"});
+		type_u64  = make_type(ws, 8, Type_Primitive{"u64"});
+		type_uint = make_type_distinct(ws, "uint", type_u32);
 
-		type_f32 = make_type(ws, 4, Type_Primitive{"f32"});
-		type_f64 = make_type(ws, 8, Type_Primitive{"f64"});
-		type_float = type_f32;
+		type_f32   = make_type(ws, 4, Type_Primitive{"f32"});
+		type_f64   = make_type(ws, 8, Type_Primitive{"f64"});
+		type_float = make_type_distinct(ws, "float", type_f32);;
 
 		type_bool = make_type(ws, 1, Type_Primitive{"bool"});
 
@@ -184,19 +184,17 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Unary: {
-			using Token_Type;
-
 			assert(kind.rhs.inferred_type != nil);
 			t := kind.rhs.inferred_type;
 			switch kind.op.kind {
-				case Not: {
+				case .Not: {
 					assert(kind.rhs.inferred_type == type_bool);
 					t = type_bool;
 				}
-				case Plus, Minus: {
+				case .Plus, .Minus: {
 					// all good
 				}
-				case Xor: { // deref
+				case .Xor: { // deref
 					ptr, ok := t.kind.(Type_Ptr);
 					if !ok {
 						error(node, "Cannot dereference a non-pointer type, given ", type_to_string(t));
@@ -205,7 +203,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 					t = ptr.ptr_to;
 				}
-				case And: { // take address
+				case .And: { // take address
 					t = get_or_make_type_ptr_to(ws, t);
 				}
 				case: {
@@ -218,8 +216,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Binary: {
-			using Token_Type;
-
 			ltype := kind.lhs.inferred_type;
 			rtype := kind.rhs.inferred_type;
 
@@ -252,15 +248,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 
 						switch op {
-							case Plus:          value = aprint(lhs_value, rhs_value);
-							case Equal:         value = lhs_value == rhs_value;
-							case Not_Equal:     value = lhs_value != rhs_value;
+							case .Plus:          value = aprint(lhs_value, rhs_value);
+							case .Equal:         value = lhs_value == rhs_value;
+							case .Not_Equal:     value = lhs_value != rhs_value;
 
 							// todo(josh): these cases compile but I have no idea what they do
-							// case Less:          value = lhs_value < rhs_value;
-							// case Greater:       value = lhs_value > rhs_value;
-							// case Less_Equal:    value = lhs_value <= rhs_value;
-							// case Greater_Equal: value = lhs_value >= rhs_value;
+							// case .Less:          value = lhs_value < rhs_value;
+							// case .Greater:       value = lhs_value > rhs_value;
+							// case .Less_Equal:    value = lhs_value <= rhs_value;
+							// case .Greater_Equal: value = lhs_value >= rhs_value;
 
 							case: unhandledcase(op);
 						}
@@ -272,10 +268,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 
 						switch op {
-							case Equal:         value = lhs_value == rhs_value;
-							case Not_Equal:     value = lhs_value != rhs_value;
-							case And_And:       value = lhs_value && rhs_value;
-							case Or_Or:         value = lhs_value || rhs_value;
+							case .Equal:         value = lhs_value == rhs_value;
+							case .Not_Equal:     value = lhs_value != rhs_value;
+							case .And_And:       value = lhs_value && rhs_value;
+							case .Or_Or:         value = lhs_value || rhs_value;
 							case: unhandledcase(op);
 						}
 					}
@@ -286,16 +282,16 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 
 						switch op {
-							case Plus:          value = lhs_value + rhs_value;
-							case Minus:         value = lhs_value - rhs_value;
-							case Multiply:      value = lhs_value * rhs_value;
-							case Divide:        value = lhs_value / rhs_value;
-							case Equal:         value = lhs_value == rhs_value;
-							case Not_Equal:     value = lhs_value != rhs_value;
-							case Less:          value = lhs_value < rhs_value;
-							case Greater:       value = lhs_value > rhs_value;
-							case Less_Equal:    value = lhs_value <= rhs_value;
-							case Greater_Equal: value = lhs_value >= rhs_value;
+							case .Plus:          value = lhs_value + rhs_value;
+							case .Minus:         value = lhs_value - rhs_value;
+							case .Multiply:      value = lhs_value * rhs_value;
+							case .Divide:        value = lhs_value / rhs_value;
+							case .Equal:         value = lhs_value == rhs_value;
+							case .Not_Equal:     value = lhs_value != rhs_value;
+							case .Less:          value = lhs_value < rhs_value;
+							case .Greater:       value = lhs_value > rhs_value;
+							case .Less_Equal:    value = lhs_value <= rhs_value;
+							case .Greater_Equal: value = lhs_value >= rhs_value;
 							case: unhandledcase(op);
 						}
 					}
@@ -306,16 +302,16 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 
 						switch op {
-						case Plus:     value = lhs_value + rhs_value;
-						case Minus:    value = lhs_value - rhs_value;
-						case Multiply: value = lhs_value * rhs_value;
-						case Divide:   value = lhs_value / rhs_value;
-						case Mod:      value = lhs_value % rhs_value;
-						case Mod_Mod:  value = lhs_value %% rhs_value;
-						case And:      value = lhs_value & rhs_value;
-						case Or:       value = lhs_value | rhs_value;
-						case Xor:      value = lhs_value ~ rhs_value;
-						case LShift:   {
+						case .Plus:     value = lhs_value + rhs_value;
+						case .Minus:    value = lhs_value - rhs_value;
+						case .Multiply: value = lhs_value * rhs_value;
+						case .Divide:   value = lhs_value / rhs_value;
+						case .Mod:      value = lhs_value % rhs_value;
+						case .Mod_Mod:  value = lhs_value %% rhs_value;
+						case .And:      value = lhs_value & rhs_value;
+						case .Or:       value = lhs_value | rhs_value;
+						case .Xor:      value = lhs_value ~ rhs_value;
+						case .LShift:   {
 							if rhs_value < 0 {
 								// todo(josh): error handling
 								logln("Shift amount must be an unsigned integer.");
@@ -323,7 +319,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 							}
 							value = lhs_value << cast(u64)rhs_value;
 						}
-						case RShift:   {
+						case .RShift:   {
 							if rhs_value < 0 {
 								// todo(josh): error handling
 								logln("Shift amount must be an unsigned integer.");
@@ -331,12 +327,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 							}
 							value = lhs_value >> cast(u64)rhs_value;
 						}
-						case Equal:         value = lhs_value == rhs_value;
-						case Not_Equal:     value = lhs_value != rhs_value;
-						case Less:          value = lhs_value < rhs_value;
-						case Greater:       value = lhs_value > rhs_value;
-						case Less_Equal:    value = lhs_value <= rhs_value;
-						case Greater_Equal: value = lhs_value >= rhs_value;
+						case .Equal:         value = lhs_value == rhs_value;
+						case .Not_Equal:     value = lhs_value != rhs_value;
+						case .Less:          value = lhs_value < rhs_value;
+						case .Greater:       value = lhs_value > rhs_value;
+						case .Less_Equal:    value = lhs_value <= rhs_value;
+						case .Greater_Equal: value = lhs_value >= rhs_value;
 						case: unhandledcase(op);
 						}
 					}
@@ -348,10 +344,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			t: ^Type;
 			switch kind.op.kind {
-				case NUMBER_OPS_BEGIN..NUMBER_OPS_END: {
+				case Token_Type.NUMBER_OPS_BEGIN..Token_Type.NUMBER_OPS_END: {
 					t = ltype;
 				}
-				case BOOL_OPS_BEGIN..BOOL_OPS_END: {
+				case Token_Type.BOOL_OPS_BEGIN..Token_Type.BOOL_OPS_END: {
 					t = type_bool;
 				}
 				case: {
@@ -509,6 +505,13 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				append(&fields, Field{field.name, field.inferred_type});
 			}
 			t := make_type_struct(ws, kind.name, fields[:]);
+			complete_node(node, t);
+			complete_sym(kind.sym, t);
+			return .Ok;
+		}
+
+		case Ast_Typedef: {
+			t := make_type_distinct(ws, kind.name, kind.other.inferred_type);
 			complete_node(node, t);
 			complete_sym(kind.sym, t);
 			return .Ok;
@@ -748,7 +751,7 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	if wanted == given do return true;
 
 	//
-	if is_signed_integer_type(wanted) && given == type_untyped_int   do return true;
+	if is_signed_integer_type(wanted) && given == type_untyped_int do return true;
 
 	if is_float_type(wanted) && given == type_untyped_int   do return true;
 	if is_float_type(wanted) && given == type_untyped_float do return true;
@@ -766,16 +769,25 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	return false;
 }
 
+
+
 is_signed_integer_type :: proc(t: ^Type) -> bool {
 	switch t {
-		case type_i8, type_i16, type_i32, type_i64: return true;
+		case type_i8, type_i16, type_i32, type_i64, type_int: return true;
 	}
 	return false;
 }
 
 is_float_type :: proc(t: ^Type) -> bool {
 	switch t {
-		case type_f32, type_f64: return true;
+		case type_f32, type_f64, type_float: return true;
+	}
+	return false;
+}
+
+is_pointer_type :: proc(t: ^Type) -> bool {
+	switch kind in t.kind {
+		case Type_Ptr: return true;
 	}
 	return false;
 }
@@ -788,6 +800,16 @@ make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_locat
 	new_type.kind = derived;
 	append(&ws.all_types, new_type);
 	return new_type;
+}
+
+make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type {
+	kind := t.kind;
+	// todo(josh): this is pretty janky
+	if s, ok := t.kind.(Type_Struct); ok {
+		s.name = new_name;
+		kind = s;
+	}
+	return make_type(ws, t.size, kind);
 }
 
 make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type {
@@ -1011,5 +1033,5 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 }
 
 unhandledcase :: proc(value: $T, loc := #caller_location) -> ! {
-	panic(tprint("Unhandled case: ", value, " at ", pretty_location(loc)));
+	panic(tprint("Unhandled case at ", pretty_location(loc), ": ", value));
 }

@@ -1,4 +1,4 @@
-proc print(var str: string) {
+proc print_string(var str: string) {
 	proc println(str: string) #odin;
 	println(str);
 }

@@ -58,11 +58,6 @@ Type :: struct {
 	size: uint,
 }
 
-Depend_Entry :: struct {
-	node: ^Ast_Node,
-	depends_on: ^Ast_Node,
-}
-
 Check_State :: enum {
 	Unchecked,
 	// Checking,

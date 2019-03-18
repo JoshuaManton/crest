@@ -28,7 +28,7 @@ Token_Type :: enum {
 	Break,
 	Continue,
 	Enum,
-	Struct,
+	Type_Keyword,
 	Union,
 	Const,
 	Sizeof,
@@ -162,15 +162,6 @@ pop_lexer :: proc() {
 is_letter :: proc(r: u8) -> bool {
 	switch cast(rune)r {
 		case 'a'..'z', 'A'..'Z': {
-			return true;
-		}
-	}
-	return false;
-}
-
-is_whitespace :: proc(r: u8) -> bool {
-	switch cast(rune)r {
-		case ' ', '\n', '\r', '\t': {
 			return true;
 		}
 	}
@@ -546,7 +537,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 					case "float":       { token_type = Float; }
 					case "bool":        { token_type = Bool; }
 					case "enum":        { token_type = Enum; }
-					case "struct":      { token_type = Struct; }
+					case "type":        { token_type = Type_Keyword; }
 					case "union":       { token_type = Union; }
 					case "const":       { token_type = Const; }
 					case "sizeof":      { token_type = Sizeof; }

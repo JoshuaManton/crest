@@ -76,6 +76,13 @@ Ast_Struct :: struct {
 	sym: ^Symbol,
 }
 
+Ast_Typedef :: struct {
+	using base: ^Ast_Node,
+	name: string,
+	other: ^Ast_Node, // should be a typespec of some kind
+	sym: ^Symbol,
+}
+
 Ast_Identifier :: struct {
 	using base: ^Ast_Node,
 	name: string,
@@ -240,6 +247,8 @@ Ast_Node :: struct {
 		Ast_Number,
 		Ast_Null,
 
+		Ast_Typedef,
+
 		Ast_Typespec_Ptr,
 		Ast_Typespec_Array,
 		Ast_Typespec_Dynamic_Array,
@@ -256,6 +265,11 @@ Ast_Node :: struct {
 	constant_value: Constant_Value,
 }
 
+Depend_Entry :: struct {
+	node: ^Ast_Node,
+	depends_on: ^Ast_Node,
+}
+
 Constant_Value :: union {
 	i64,
 	f64,
@@ -269,11 +283,4 @@ Site :: struct {
 	filename: string,
 	line: int,
 	column: int,
-}
-
-
-
-Procedure_Directive_Mapping :: struct {
-	directive: string,
-	bit:       u32, // usage: `proc_flags |= 1 << bit`
 }
