@@ -64,7 +64,7 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		};
 		type_string = make_type_struct(ws, "string", fields[:]); create_symbol(ws.global_scope, "string", type_string);
 
-		type_typeid = make_type_distinct(ws, "type_id", type_i32); create_symbol(ws.global_scope, "type_id", type_int);
+		type_typeid = make_type_distinct(ws, "type_id", type_int); create_symbol(ws.global_scope, "type_id", type_typeid);
 
 		type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
 		type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
@@ -386,11 +386,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				return Check_Result.Not_Checked;
 			}
 
+			complete_node(node, sym.inferred_type);
+			// logln(sym.name,"     ", sym.constant_value, "     ", sym.inferred_type^);
 			if sym.constant_value != nil {
 				node.constant_value = sym.constant_value;
 			}
-
-			complete_node(node, sym.inferred_type);
 			return .Ok;
 		}
 
@@ -719,14 +719,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 ensure_is_assignable_to :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) -> bool {
 	if !is_assignable_to(wanted, given.inferred_type, loc) {
-		type_mismatch(wanted, given);
+		type_mismatch(wanted, given, loc);
 		return false;
 	}
 	return true;
 }
 
-type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node) {
+type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) {
 	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.inferred_type));
+	logln(loc);
 }
 
 is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
@@ -793,11 +794,24 @@ make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_locat
 make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type {
 	kind := t.kind;
 	// todo(josh): this is pretty janky
-	if s, ok := t.kind.(Type_Struct); ok {
-		s.name = new_name;
-		kind = s;
+	switch type_kind in &t.kind {
+	case Type_Primitive: {
+		kind := type_kind^;
+		kind.name = new_name;
+		return make_type(ws, t.size, kind);
 	}
-	return make_type(ws, t.size, kind);
+	case Type_Struct: {
+		kind := type_kind^;
+		kind.name = new_name;
+		return make_type(ws, t.size, kind);
+	}
+	case: {
+		return make_type(ws, t.size, t.kind);
+	}
+	}
+	unreachable();
+	return {};
+
 }
 
 make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type {
@@ -950,7 +964,7 @@ complete_sym :: inline proc(sym: ^Symbol, t: ^Type) {
 
 error :: proc{node_error, site_error};
 node_error :: proc(base: ^Ast_Node, args: ..any) {
-	site_error(base.root_token.site, args);
+	site_error(base.root_token.site, ..args);
 }
 
 site_error :: proc(site_var: Site, args: ..any) {

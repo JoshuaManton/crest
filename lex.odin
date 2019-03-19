@@ -42,14 +42,6 @@ Token_Type :: enum {
 	Directive_Include,
 	Directive_Assert,
 
-	BUILTIN_TYPES_BEGIN,
-	Void,
-	Int,
-	String,
-	Float,
-	Bool,
-	BUILTIN_TYPES_END,
-
 	// Multiplicative precedence
 	NUMBER_OPS_BEGIN,
 	MUL_BEGIN,
@@ -532,10 +524,6 @@ next_token :: proc(loc := #caller_location) -> Token {
 					case "in":          { token_type = In; }
 					case "break":       { token_type = Break; }
 					case "continue":    { token_type = Continue; }
-					case "int":         { token_type = Int; }
-					case "string":      { token_type = String; }
-					case "float":       { token_type = Float; }
-					case "bool":        { token_type = Bool; }
 					case "enum":        { token_type = Enum; }
 					case "type":        { token_type = Type_Keyword; }
 					case "union":       { token_type = Union; }

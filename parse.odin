@@ -178,23 +178,11 @@ is_cmp_op :: proc() -> bool {
 	return cast(i32)kind > cast(i32)CMP_BEGIN && cast(i32)kind < cast(i32)CMP_END;
 }
 
-is_ident_or_type_keyword :: proc(kind: Token_Type) -> bool {
-	using Token_Type;
-
-	switch kind {
-		case Ident, BUILTIN_TYPES_BEGIN..BUILTIN_TYPES_END: {
-			return true;
-		}
-	}
-
-	return false;
-}
-
 parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	token := peek();
-	if is_ident_or_type_keyword(token.kind) {
+	if token.kind == Ident {
 		token = next_token();
 		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
 		queue_identifier_for_resolving(ws, symbol);

@@ -56,6 +56,8 @@ proc structs() {
 	other.x = 4;
 	other.y = 7;
 	// other = vec; <- type mismatch
+
+	print_int(Other_Vector2);
 }
 
 proc arrays() {
