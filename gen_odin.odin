@@ -132,7 +132,7 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 		}
 
 		case Ast_Cast: {
-			sbprint(&buf, "cast(", type_to_odin_string(node.inferred_type), ")", expr_to_string(kind.rhs));
+			sbprint(&buf, "cast(", type_to_odin_string(node.expr_type), ")", expr_to_string(kind.rhs));
 		}
 
 		case Ast_Identifier: {
@@ -185,7 +185,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 	for _, idx in decl.fields {
 		field := decl.fields[idx];
 		indent(output_code);
-		print_var_decl(output_code, field.name, field.inferred_type, nil);
+		print_var_decl(output_code, field.name, field.var_type, nil);
 		output(output_code, ",\n");
 	}
 	pop_indent();
@@ -194,7 +194,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 }
 
 print_typedef :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Typedef) {
-	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.inferred_type), ";\n");
+	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.real_type), ";\n");
 }
 
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
@@ -209,7 +209,7 @@ print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 		param := decl.params[idx];
 		output(output_code, comma);
 		comma = ", ";
-		print_var_decl(output_code, param.name, param.inferred_type, param.expr);
+		print_var_decl(output_code, param.name, param.var_type, param.expr);
 	}
 
 	output(output_code, ")");
@@ -355,7 +355,7 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 			print_return_stmt(output_code, kind);
 		}
 		case Ast_Var: {
-			print_var_decl(output_code, kind.name, kind.inferred_type, kind.expr, kind.is_constant);
+			print_var_decl(output_code, kind.name, kind.var_type, kind.expr, kind.is_constant);
 			output(output_code, ";\n");
 		}
 		case Ast_Assign: {
@@ -384,7 +384,7 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 	assert(block != nil);
 
 	with_curlies := true;
-	if block.parent == nil {
+	if block.base.parent == nil {
 		with_curlies = false;
 	}
 

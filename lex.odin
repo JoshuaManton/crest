@@ -41,6 +41,7 @@ Token_Type :: enum {
 	Directive_Odin_Proc,
 	Directive_Include,
 	Directive_Assert,
+	Directive_Type,
 
 	// Multiplicative precedence
 	NUMBER_OPS_BEGIN,
@@ -240,6 +241,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 				case "#odin":    token_type = Directive_Odin_Proc;
 				case "#include": token_type = Directive_Include;
 				case "#assert":  token_type = Directive_Assert;
+				case "#type":    token_type = Directive_Type;
 				case: {
 					logln("Invalid hash directive: ", token_text);
 					return Token{};

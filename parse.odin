@@ -73,6 +73,7 @@ _alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #ca
 		nil,
 		nil,
 		nil,
+		nil,
 	};
 
 	return cast(^T)ptr;
@@ -178,15 +179,17 @@ is_cmp_op :: proc() -> bool {
 	return cast(i32)kind > cast(i32)CMP_BEGIN && cast(i32)kind < cast(i32)CMP_END;
 }
 
-parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
+parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 	using Token_Type;
 
 	token := peek();
 	if token.kind == Ident {
 		token = next_token();
-		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
+		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil, true});
 		queue_identifier_for_resolving(ws, symbol);
-		return symbol.base;
+		ident_typespec := node(ws, token, Ast_Typespec{{}, nil, Typespec_Identifier{symbol}});
+		depend(ws, ident_typespec, symbol);
+		return ident_typespec;
 	}
 
 	if token.kind == Union {
@@ -202,14 +205,14 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 
 		expect(Right_Curly);
 
-		union_node := node(ws, token, Ast_Typespec_Union{{}, types[:]});
+		union_node := node(ws, token, Ast_Typespec{{}, nil, Typespec_Union{types[:]}});
 
 		// todo: factor this into the loop above
 		for t in types {
 			depend(ws, union_node, t);
 		}
 
-		return union_node.base;
+		return union_node;
 	}
 
 	if token.kind == Proc {
@@ -221,18 +224,18 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 		if peek().kind == Right_Square {
 			next_token();
 			typespec := parse_typespec(ws);
-			slice := node(ws, token, Ast_Typespec_Slice{{}, typespec});
+			slice := node(ws, token, Ast_Typespec{{}, nil, Typespec_Slice{typespec}});
 			depend(ws, slice, typespec);
-			return slice.base;
+			return slice;
 		}
 
 		if peek().kind == Dot_Dot {
 			next_token();
 			expect(Right_Square);
 			typespec := parse_typespec(ws);
-			dynamic_array := node(ws, token, Ast_Typespec_Dynamic_Array{{}, typespec});
+			dynamic_array := node(ws, token, Ast_Typespec{{}, nil, Typespec_Dynamic_Array{typespec}});
 			depend(ws, dynamic_array, typespec);
-			return dynamic_array.base;
+			return dynamic_array;
 		}
 
 		array_length_expr := parse_expr(ws);
@@ -241,16 +244,16 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Node {
 		typespec := parse_typespec(ws);
 		depend(ws, typespec, array_length_expr);
 
-		array := node(ws, token, Ast_Typespec_Array{{}, array_length_expr, typespec});
+		array := node(ws, token, Ast_Typespec{{}, nil, Typespec_Array{array_length_expr, typespec}});
 		depend(ws, array, typespec);
-		return array.base;
+		return array;
 	}
 
 	assert(modifier.kind == Xor);
 	typespec := parse_typespec(ws);
-	ptr := node(ws, token, Ast_Typespec_Ptr{{}, typespec});
+	ptr := node(ws, token, Ast_Typespec{{}, nil, Typespec_Ptr{typespec}});
 	depend(ws, ptr, typespec);
-	return ptr.base;
+	return ptr;
 }
 
 import "core:strconv"
@@ -293,7 +296,7 @@ parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 		}
 		case Ident: {
 			ident := token.text;
-			sym := node(ws, token, Ast_Identifier{{}, token.text, nil});
+			sym := node(ws, token, Ast_Identifier{{}, token.text, nil, false});
 			queue_identifier_for_resolving(ws, sym);
 			return sym.base;
 		}
@@ -514,11 +517,11 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 
 	decl := create_symbol(ws.current_scope, name, nil);
 
-	typespec: ^Ast_Node;
+	typespec: ^Ast_Typespec;
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil});
 	}
 
 	if is_token(Colon) {
@@ -529,7 +532,19 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	if !is_token(In) {
 		if is_token(Assign) {
 			next_token();
-			value = parse_expr(ws);
+			/*
+			if is_token(Directive_Type) {
+				directive := next_token();
+				typespec := parse_typespec(ws);
+				value = node(ws, directive, Ast_Type_Expression{{}, typespec});
+				depend(ws, value, typespec);
+			}
+			else {
+				*/
+				value = parse_expr(ws);
+				/*
+			}
+			*/
 		}
 		else {
 			if typespec == nil {
@@ -538,7 +553,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -613,7 +628,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 
 	flags := try_parse_proc_directives(ws);
 
-	return_type: ^Ast_Node;
+	return_type: ^Ast_Typespec;
 	if !is_token(Left_Curly) && !is_token(Semicolon) {
 		return_type = parse_typespec(ws);
 	}
@@ -672,7 +687,7 @@ parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Node {
 			append(&fields, field);
 		}
 
-		n = node(ws, struct_token, Ast_Struct{{}, name_token.text, fields[:], decl});
+		n = node(ws, struct_token, Ast_Struct{{}, name_token.text, fields[:], decl, nil});
 		depend(ws, n, block);
 	}
 	else {

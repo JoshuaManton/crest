@@ -1,28 +1,40 @@
 package crest
 
-Ast_Typespec_Ptr :: struct {
+Ast_Typespec :: struct {
 	using base: ^Ast_Node,
-	typespec: ^Ast_Node,
+	real_type: ^Type,
+	kind: union {
+		Typespec_Identifier,
+		Typespec_Ptr,
+		Typespec_Array,
+		Typespec_Dynamic_Array,
+		Typespec_Slice,
+		Typespec_Union,
+	}
 }
 
-Ast_Typespec_Array :: struct {
-	using base: ^Ast_Node,
+Typespec_Identifier :: struct {
+	ident: ^Ast_Identifier,
+}
+
+Typespec_Ptr :: struct {
+	typespec: ^Ast_Typespec,
+}
+
+Typespec_Array :: struct {
 	size_expr: ^Ast_Node,
-	typespec: ^Ast_Node,
+	typespec: ^Ast_Typespec,
 }
 
-Ast_Typespec_Dynamic_Array :: struct {
-	using base: ^Ast_Node,
-	typespec: ^Ast_Node,
+Typespec_Dynamic_Array :: struct {
+	typespec: ^Ast_Typespec,
 }
 
-Ast_Typespec_Slice :: struct {
-	using base: ^Ast_Node,
-	typespec: ^Ast_Node,
+Typespec_Slice :: struct {
+	typespec: ^Ast_Typespec,
 }
 
-Ast_Typespec_Union :: struct {
-	using base: ^Ast_Node,
+Typespec_Union :: struct {
 	types: []^Ast_Node,
 }
 
@@ -49,10 +61,11 @@ Ast_Proc :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	params: []^Ast_Var,
-	return_typespec: ^Ast_Node,
+	return_typespec: ^Ast_Typespec,
 	flags: u32,
 	block: ^Ast_Block,
 
+	signature_type: ^Type,
 	return_type: ^Type,
 	sym: ^Symbol,
 
@@ -63,10 +76,11 @@ Ast_Proc :: struct {
 Ast_Var :: struct {
 	using base: ^Ast_Node,
 	name: string,
-	typespec: ^Ast_Node,
+	typespec: ^Ast_Typespec,
 	expr: ^Ast_Node,
 	sym: ^Symbol,
 	is_constant: bool,
+	var_type: ^Type,
 }
 
 Ast_Struct :: struct {
@@ -74,12 +88,13 @@ Ast_Struct :: struct {
 	name: string,
 	fields: []^Ast_Var,
 	sym: ^Symbol,
+	struct_type: ^Type,
 }
 
 Ast_Typedef :: struct {
 	using base: ^Ast_Node,
 	name: string,
-	other: ^Ast_Node, // should be a typespec of some kind
+	other: ^Ast_Typespec,
 	sym: ^Symbol,
 }
 
@@ -87,6 +102,7 @@ Ast_Identifier :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	sym: ^Symbol,
+	is_type_ident: bool,
 }
 
 Ast_Assign :: struct {
@@ -168,13 +184,13 @@ Ast_Binary :: struct {
 
 Ast_Cast :: struct {
 	using base: ^Ast_Node,
-	typespec: ^Ast_Node,
+	typespec: ^Ast_Typespec,
 	rhs: ^Ast_Node,
 }
 
 Ast_Sizeof :: struct {
 	using base: ^Ast_Node,
-	typespec: ^Ast_Node,
+	typespec: ^Ast_Typespec,
 }
 
 Ast_Subscript :: struct {
@@ -249,11 +265,7 @@ Ast_Node :: struct {
 
 		Ast_Typedef,
 
-		Ast_Typespec_Ptr,
-		Ast_Typespec_Array,
-		Ast_Typespec_Dynamic_Array,
-		Ast_Typespec_Slice,
-		Ast_Typespec_Union,
+		Ast_Typespec,
 	},
 
 	serial: int,
@@ -261,7 +273,8 @@ Ast_Node :: struct {
 	root_token: Token,
 	check_state: Check_State,
 	depends: [dynamic]^Ast_Node,
-	inferred_type: ^Type,
+	expr_type: ^Type,
+	typespec_type: ^Type,
 	constant_value: Constant_Value,
 }
 
@@ -276,6 +289,8 @@ Constant_Value :: union {
 	bool,
 	string,
 }
+
+TypeID :: distinct int;
 
 
 
