@@ -72,23 +72,22 @@ structs :: proc() {
 		y: f32,
 	}
 
-	// demo.cr(46:5)
-	vector_proc :: proc(v: Vector2) -> f32 {
-		return v.x * 3.140;
-	}
-
 	vec: Vector2;
-	vec.x = 3;
-	vec.y = vector_proc(vec);
-	// demo.cr(54:5)
+	vec.x = 1;
+	vec.y = 4;
+	// type alias
+	a: int = 5;
+	b: ^int = &a;
+	print_int(b^);
+	// demo.cr(56:5)
 	Other_Vector2 :: distinct Vector2;
-	other: Other_Vector2;
-	other.x = 4;
-	other.y = 7;
-	// other = vec; <- type mismatch
+	// distinct type
+	x: Vector2;
+	y: Other_Vector2;
+	// y = x; <- type mismatch
 }
 
-// demo.cr(61:1)
+// demo.cr(63:1)
 arrays :: proc() {
 	N: int : 16;
 	arr: [16]f32;

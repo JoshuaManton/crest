@@ -43,19 +43,21 @@ proc structs() {
 		var y: float;
 	}
 
-	proc vector_proc(v: Vector2) float {
-		return v.x * 3.14;
-	}
-
 	var vec: Vector2;
-	vec.x = 3;
-	vec.y = vector_proc(vec);
+	vec.x = 1;
+	vec.y = 4;
 
-	type Other_Vector2 Vector2;
-	var other: Other_Vector2;
-	other.x = 4;
-	other.y = 7;
-	// other = vec; <- type mismatch
+	const MyInt = #type int; // type alias
+	#assert #type MyInt == #type int
+	var a: int = 5;
+	var b: ^MyInt = &a;
+	print_int(^b);
+
+	type Other_Vector2 Vector2; // distinct type
+	#assert #type Other_Vector2 != #type Vector2
+	var x: Vector2;
+	var y: Other_Vector2;
+	// y = x; <- type mismatch
 }
 
 proc arrays() {

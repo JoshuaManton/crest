@@ -33,7 +33,7 @@ type_bool: ^Type;
 
 type_string: ^Type;
 
-type_typeid: ^Type;
+type_type_id: ^Type;
 
 type_untyped_int:   ^Type;
 type_untyped_float: ^Type;
@@ -64,7 +64,7 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		};
 		type_string = make_type_struct(ws, "string", fields[:]); create_symbol(ws.global_scope, "string", type_string);
 
-		type_typeid = make_type_distinct(ws, "type_id", type_int); create_symbol(ws.global_scope, "type_id", type_typeid);
+		type_type_id = make_type_distinct(ws, "type_id", type_int); create_symbol(ws.global_scope, "type_id", type_type_id);
 
 		type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
 		type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
@@ -229,9 +229,23 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 					#complete
 					switch lhs_value in a {
+					case Pointer_To_Type: {
+						rhs_value, ok := b.(^Type);
+						if !ok {
+							panic("todo(josh): error handling");
+							return nil;
+						}
+
+						switch op {
+							case .Equal:         value = lhs_value == rhs_value;
+							case .Not_Equal:     value = lhs_value != rhs_value;
+							case: unhandledcase(op);
+						}
+					}
 					case string: {
 						rhs_value, ok := b.(string);
 						if !ok {
+							panic("todo(josh): error handling");
 							return nil;
 						}
 
@@ -252,6 +266,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					case bool: {
 						rhs_value, ok := b.(bool);
 						if !ok {
+							panic("todo(josh): error handling");
 							return nil;
 						}
 
@@ -266,6 +281,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					case f64: {
 						rhs_value, ok := b.(f64);
 						if !ok {
+							panic("todo(josh): error handling");
 							return nil;
 						}
 
@@ -286,6 +302,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					case i64: {
 						rhs_value, ok := b.(i64);
 						if !ok {
+							panic("todo(josh): error handling");
 							return nil;
 						}
 
@@ -376,9 +393,8 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Cast: {
-			assert(kind.typespec.real_type != nil);
-			target := kind.typespec.real_type;
-			// todo: check if valid cast (can't cast string to Vector2, for example)
+			target := kind.typespec.base.constant_value.(^Type);
+			// todo: check if valid cast (can't cast string to int, for example)
 			complete_expr(node, target);
 			return .Ok;
 		}
@@ -393,7 +409,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			if kind.is_type_ident {
 				complete_node(node);
-
 			}
 			else {
 				complete_expr(node, sym.inferred_type);
@@ -439,13 +454,19 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Var: {
 			declared_type: ^Type;
 			if kind.typespec != nil {
-				assert(kind.typespec.real_type != nil);
-				declared_type = kind.typespec.real_type;
+				declared_type = kind.typespec.base.constant_value.(^Type);
 			}
 			expr_type: ^Type;
 			if kind.expr != nil {
-				assert(kind.expr.expr_type != nil);
-				expr_type = kind.expr.expr_type;
+				// note(josh): little bit janky. should figure out a better solution for type aliases
+				switch expr_kind in kind.expr.derived {
+					case Ast_Type_Expression: {
+						expr_type = expr_kind.base.constant_value.(^Type);
+					}
+					case: {
+						expr_type = kind.expr.expr_type;
+					}
+				}
 			}
 
 			true_type: ^Type;
@@ -489,8 +510,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Proc: {
 			if kind.return_typespec != nil {
-				assert(kind.return_typespec.real_type != nil);
-				kind.return_type = kind.return_typespec.real_type;
+				kind.return_type = kind.return_typespec.base.constant_value.(^Type);
 			}
 
 			t := get_or_make_type_proc(ws, kind);
@@ -512,7 +532,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Typedef: {
-			t := make_type_distinct(ws, kind.name, kind.other.real_type);
+			t := make_type_distinct(ws, kind.name, kind.other.base.constant_value.(^Type));
 			complete_node(node);
 			complete_sym(kind.sym, t);
 			return .Ok;
@@ -660,24 +680,29 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			return .Ok;
 		}
 
+		case Ast_Type_Expression: {
+			node.constant_value = kind.typespec.base.constant_value.(^Type);
+			complete_expr(node, type_type_id);
+			return .Ok;
+		}
+
 		case Ast_Typespec: {
 			#complete
 			switch typespec_kind in kind.kind {
 				case Typespec_Identifier: {
 					assert(typespec_kind.ident.sym.inferred_type != nil);
+					//logln(typespec_kind.ident.sym.name, typespec_kind.ident.sym.inferred_type);
 					complete_typespec(kind, typespec_kind.ident.sym.inferred_type);
 					return .Ok;
 				}
 				case Typespec_Dynamic_Array: {
-					assert(typespec_kind.typespec.real_type != nil);
-					array_of := typespec_kind.typespec.real_type;
+					array_of := typespec_kind.typespec.base.constant_value.(^Type);
 					t := get_or_make_type_dynamic_array_of(ws, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Array: {
-					assert(typespec_kind.typespec.real_type != nil);
 					if typespec_kind.size_expr.constant_value == nil {
 						error(typespec_kind.size_expr, "Array sizes require a constant integer value.");
 						return .Error;
@@ -687,23 +712,21 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						error(typespec_kind.size_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
-					array_of := typespec_kind.typespec.real_type;
+					array_of := typespec_kind.typespec.base.constant_value.(^Type);
 					t := get_or_make_type_array_of(ws, cast(uint)array_size, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Slice: {
-					assert(typespec_kind.typespec.real_type != nil);
-					slice_of := typespec_kind.typespec.real_type;
+					slice_of := typespec_kind.typespec.base.constant_value.(^Type);
 					t := get_or_make_type_slice_of(ws, slice_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Ptr: {
-					assert(typespec_kind.typespec.real_type != nil);
-					ptr_to := typespec_kind.typespec.real_type;
+					ptr_to := typespec_kind.typespec.base.constant_value.(^Type);
 					t := get_or_make_type_ptr_to(ws, ptr_to);
 					complete_typespec(kind, t);
 					return .Ok;
@@ -840,7 +863,7 @@ is_pointer_type :: proc(t: ^Type) -> bool {
 
 
 
-make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
+make_type :: proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
 	new_type := new(Type);
 	new_type.id = cast(TypeID)len(ws.all_types)+1;
 	new_type.size = size;
@@ -851,21 +874,22 @@ make_type ::  proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_locat
 
 make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type {
 	assert(t != nil);
-	kind := t.kind;
+	tval := t^;
+	new_t := new_clone(tval);
 	// todo(josh): this is pretty janky
-	switch type_kind in &t.kind {
+	switch type_kind in &new_t.kind {
 	case Type_Primitive: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, t.size, kind);
+		return make_type(ws, new_t.size, kind);
 	}
 	case Type_Struct: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, t.size, kind);
+		return make_type(ws, new_t.size, kind);
 	}
 	case: {
-		return make_type(ws, t.size, t.kind);
+		return make_type(ws, new_t.size, new_t.kind);
 	}
 	}
 	unreachable();
@@ -1006,10 +1030,10 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 
 
 // todo(josh): typespecs and expressions are different things right now and maybe they shouldn't be
-complete_typespec :: inline proc(typespec: ^Ast_Typespec, t: ^Type) {
+complete_typespec :: inline proc(typespec: ^Ast_Typespec, t: ^Type, loc := #caller_location) {
 	assert(typespec != nil);
 	assert(t != nil);
-	typespec.real_type = t;
+	typespec.constant_value = t;
 	complete_node(typespec.base);
 }
 

@@ -101,7 +101,16 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 		}
 
 		case Ast_Unary: {
-			sbprint(&buf, kind.op.text, expr_to_string(kind.rhs));
+			using Token_Type;
+			switch kind.op.kind {
+				case Plus, Minus, And, Not: {
+					sbprint(&buf, kind.op.text, expr_to_string(kind.rhs));
+				}
+				case Xor: {
+					sbprint(&buf, expr_to_string(kind.rhs), kind.op.text);
+				}
+				case: unhandledcase(kind.op);
+			}
 		}
 
 		case Ast_Selector: {
@@ -194,7 +203,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 }
 
 print_typedef :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Typedef) {
-	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.real_type), ";\n");
+	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.base.constant_value.(^Type)), ";\n");
 }
 
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
@@ -401,6 +410,13 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 			switch kind in stmt.derived {
 			case Ast_Directive_Assert: {
 				continue;
+			}
+			case Ast_Var: {
+				if kind.expr != nil {
+					if _, ok := kind.expr.derived.(Ast_Type_Expression); ok && kind.is_constant {
+						continue;
+					}
+				}
 			}
 			case Ast_Proc: {
 				if kind.flags & PROC_IS_ODIN_PROC > 0 do continue;

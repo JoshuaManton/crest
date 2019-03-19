@@ -2,7 +2,7 @@ package crest
 
 Ast_Typespec :: struct {
 	using base: ^Ast_Node,
-	real_type: ^Type,
+	// real type is stored in base.constant_value
 	kind: union {
 		Typespec_Identifier,
 		Typespec_Ptr,
@@ -36,6 +36,11 @@ Typespec_Slice :: struct {
 
 Typespec_Union :: struct {
 	types: []^Ast_Node,
+}
+
+Ast_Type_Expression :: struct {
+	using base: ^Ast_Node,
+	typespec: ^Ast_Typespec,
 }
 
 Ast_Directive :: struct {
@@ -266,6 +271,7 @@ Ast_Node :: struct {
 		Ast_Typedef,
 
 		Ast_Typespec,
+		Ast_Type_Expression,
 	},
 
 	serial: int,
@@ -274,7 +280,6 @@ Ast_Node :: struct {
 	check_state: Check_State,
 	depends: [dynamic]^Ast_Node,
 	expr_type: ^Type,
-	typespec_type: ^Type,
 	constant_value: Constant_Value,
 }
 
@@ -288,7 +293,10 @@ Constant_Value :: union {
 	f64,
 	bool,
 	string,
+	Pointer_To_Type,
 }
+
+Pointer_To_Type :: ^Type;
 
 TypeID :: distinct int;
 
