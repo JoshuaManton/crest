@@ -213,29 +213,22 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 
 			if kind.lhs.constant_value != nil && kind.rhs.constant_value != nil {
-				value := evaluate_constant_value(kind.op.kind, kind.lhs.constant_value, kind.rhs.constant_value, kind.lhs.root_token.site);
-				if value == nil {
-					// todo(josh): better error message here?
-					type_mismatch(ltype, kind.rhs);
-					return .Error;
-				}
+				value := evaluate_constant_value(kind.op.kind, kind.lhs.constant_value, kind.rhs.constant_value);
+				assert(value != nil); // nil means the types didn't match we shouldn't have gotten this far if that is true
 				node.constant_value = value;
 
-				evaluate_constant_value :: proc(op: Token_Type, a: Constant_Value, b: Constant_Value, op_site: Site) -> Constant_Value {
+				evaluate_constant_value :: proc(op: Token_Type, a: Constant_Value, b: Constant_Value) -> Constant_Value {
 					assert(a != nil);
 					assert(b != nil);
+
+					// we can assume the types of a and b match
 
 					value: Constant_Value;
 
 					#complete
 					switch lhs in a {
 					case TypeID: {
-						rhs, ok := b.(TypeID);
-						if !ok {
-							panic("todo(josh): error handling");
-							return nil;
-						}
-
+						rhs := b.(TypeID);
 						switch op {
 							case .Equal:         value = lhs == rhs;
 							case .Not_Equal:     value = lhs != rhs;
@@ -243,12 +236,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 					}
 					case string: {
-						rhs, ok := b.(string);
-						if !ok {
-							panic("todo(josh): error handling");
-							return nil;
-						}
-
+						rhs := b.(string);
 						switch op {
 							case .Plus:          value = aprint(lhs, rhs);
 							case .Equal:         value = lhs == rhs;
@@ -264,12 +252,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 					}
 					case bool: {
-						rhs, ok := b.(bool);
-						if !ok {
-							panic("todo(josh): error handling");
-							return nil;
-						}
-
+						rhs := b.(bool);
 						switch op {
 							case .Equal:         value = lhs == rhs;
 							case .Not_Equal:     value = lhs != rhs;
@@ -279,12 +262,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 					}
 					case f64: {
-						rhs, ok := b.(f64);
-						if !ok {
-							panic("todo(josh): error handling");
-							return nil;
-						}
-
+						rhs := b.(f64);
 						switch op {
 							case .Plus:          value = lhs + rhs;
 							case .Minus:         value = lhs - rhs;
@@ -300,12 +278,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 					}
 					case i64: {
-						rhs, ok := b.(i64);
-						if !ok {
-							panic("todo(josh): error handling");
-							return nil;
-						}
-
+						rhs := b.(i64);
 						switch op {
 						case .Plus:     value = lhs + rhs;
 						case .Minus:    value = lhs - rhs;

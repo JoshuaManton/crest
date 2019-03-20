@@ -47,14 +47,14 @@ proc structs() {
 	vec.x = 1;
 	vec.y = 4;
 
-	const MyInt = #type int; // type alias
-	#assert #type MyInt == #type int
+	const MyInt = int; // type alias
+	#assert MyInt == int
 	var a: int = 5;
 	var b: ^MyInt = &a;
 	print_int(^b);
 
 	type Other_Vector2 Vector2; // distinct type
-	#assert #type Other_Vector2 != #type Vector2
+	#assert Other_Vector2 != Vector2
 	var x: Vector2;
 	var y: Other_Vector2;
 	// y = x; <- type mismatch
@@ -63,6 +63,7 @@ proc structs() {
 proc arrays() {
 	const N = 16;
 	var arr: [N]float;
+	arr[0] = 76;
 	arr[2] = 123;
 	print_float(arr[0]);
 	print_float(arr[2]);
