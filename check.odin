@@ -228,116 +228,116 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					value: Constant_Value;
 
 					#complete
-					switch lhs_value in a {
-					case Pointer_To_Type: {
-						rhs_value, ok := b.(^Type);
+					switch lhs in a {
+					case TypeID: {
+						rhs, ok := b.(TypeID);
 						if !ok {
 							panic("todo(josh): error handling");
 							return nil;
 						}
 
 						switch op {
-							case .Equal:         value = lhs_value == rhs_value;
-							case .Not_Equal:     value = lhs_value != rhs_value;
+							case .Equal:         value = lhs == rhs;
+							case .Not_Equal:     value = lhs != rhs;
 							case: unhandledcase(op);
 						}
 					}
 					case string: {
-						rhs_value, ok := b.(string);
+						rhs, ok := b.(string);
 						if !ok {
 							panic("todo(josh): error handling");
 							return nil;
 						}
 
 						switch op {
-							case .Plus:          value = aprint(lhs_value, rhs_value);
-							case .Equal:         value = lhs_value == rhs_value;
-							case .Not_Equal:     value = lhs_value != rhs_value;
+							case .Plus:          value = aprint(lhs, rhs);
+							case .Equal:         value = lhs == rhs;
+							case .Not_Equal:     value = lhs != rhs;
 
 							// todo(josh): these cases compile but I have no idea what they do
-							// case .Less:          value = lhs_value < rhs_value;
-							// case .Greater:       value = lhs_value > rhs_value;
-							// case .Less_Equal:    value = lhs_value <= rhs_value;
-							// case .Greater_Equal: value = lhs_value >= rhs_value;
+							// case .Less:          value = lhs < rhs;
+							// case .Greater:       value = lhs > rhs;
+							// case .Less_Equal:    value = lhs <= rhs;
+							// case .Greater_Equal: value = lhs >= rhs;
 
 							case: unhandledcase(op);
 						}
 					}
 					case bool: {
-						rhs_value, ok := b.(bool);
+						rhs, ok := b.(bool);
 						if !ok {
 							panic("todo(josh): error handling");
 							return nil;
 						}
 
 						switch op {
-							case .Equal:         value = lhs_value == rhs_value;
-							case .Not_Equal:     value = lhs_value != rhs_value;
-							case .And_And:       value = lhs_value && rhs_value;
-							case .Or_Or:         value = lhs_value || rhs_value;
+							case .Equal:         value = lhs == rhs;
+							case .Not_Equal:     value = lhs != rhs;
+							case .And_And:       value = lhs && rhs;
+							case .Or_Or:         value = lhs || rhs;
 							case: unhandledcase(op);
 						}
 					}
 					case f64: {
-						rhs_value, ok := b.(f64);
+						rhs, ok := b.(f64);
 						if !ok {
 							panic("todo(josh): error handling");
 							return nil;
 						}
 
 						switch op {
-							case .Plus:          value = lhs_value + rhs_value;
-							case .Minus:         value = lhs_value - rhs_value;
-							case .Multiply:      value = lhs_value * rhs_value;
-							case .Divide:        value = lhs_value / rhs_value;
-							case .Equal:         value = lhs_value == rhs_value;
-							case .Not_Equal:     value = lhs_value != rhs_value;
-							case .Less:          value = lhs_value < rhs_value;
-							case .Greater:       value = lhs_value > rhs_value;
-							case .Less_Equal:    value = lhs_value <= rhs_value;
-							case .Greater_Equal: value = lhs_value >= rhs_value;
+							case .Plus:          value = lhs + rhs;
+							case .Minus:         value = lhs - rhs;
+							case .Multiply:      value = lhs * rhs;
+							case .Divide:        value = lhs / rhs;
+							case .Equal:         value = lhs == rhs;
+							case .Not_Equal:     value = lhs != rhs;
+							case .Less:          value = lhs < rhs;
+							case .Greater:       value = lhs > rhs;
+							case .Less_Equal:    value = lhs <= rhs;
+							case .Greater_Equal: value = lhs >= rhs;
 							case: unhandledcase(op);
 						}
 					}
 					case i64: {
-						rhs_value, ok := b.(i64);
+						rhs, ok := b.(i64);
 						if !ok {
 							panic("todo(josh): error handling");
 							return nil;
 						}
 
 						switch op {
-						case .Plus:     value = lhs_value + rhs_value;
-						case .Minus:    value = lhs_value - rhs_value;
-						case .Multiply: value = lhs_value * rhs_value;
-						case .Divide:   value = lhs_value / rhs_value;
-						case .Mod:      value = lhs_value % rhs_value;
-						case .Mod_Mod:  value = lhs_value %% rhs_value;
-						case .And:      value = lhs_value & rhs_value;
-						case .Or:       value = lhs_value | rhs_value;
-						case .Xor:      value = lhs_value ~ rhs_value;
+						case .Plus:     value = lhs + rhs;
+						case .Minus:    value = lhs - rhs;
+						case .Multiply: value = lhs * rhs;
+						case .Divide:   value = lhs / rhs;
+						case .Mod:      value = lhs % rhs;
+						case .Mod_Mod:  value = lhs %% rhs;
+						case .And:      value = lhs & rhs;
+						case .Or:       value = lhs | rhs;
+						case .Xor:      value = lhs ~ rhs;
 						case .LShift:   {
-							if rhs_value < 0 {
+							if rhs < 0 {
 								// todo(josh): error handling
 								logln("Shift amount must be an unsigned integer.");
 								return nil;
 							}
-							value = lhs_value << cast(u64)rhs_value;
+							value = lhs << cast(u64)rhs;
 						}
 						case .RShift:   {
-							if rhs_value < 0 {
+							if rhs < 0 {
 								// todo(josh): error handling
 								logln("Shift amount must be an unsigned integer.");
 								return nil;
 							}
-							value = lhs_value >> cast(u64)rhs_value;
+							value = lhs >> cast(u64)rhs;
 						}
-						case .Equal:         value = lhs_value == rhs_value;
-						case .Not_Equal:     value = lhs_value != rhs_value;
-						case .Less:          value = lhs_value < rhs_value;
-						case .Greater:       value = lhs_value > rhs_value;
-						case .Less_Equal:    value = lhs_value <= rhs_value;
-						case .Greater_Equal: value = lhs_value >= rhs_value;
+						case .Equal:         value = lhs == rhs;
+						case .Not_Equal:     value = lhs != rhs;
+						case .Less:          value = lhs < rhs;
+						case .Greater:       value = lhs > rhs;
+						case .Less_Equal:    value = lhs <= rhs;
+						case .Greater_Equal: value = lhs >= rhs;
 						case: unhandledcase(op);
 						}
 					}
@@ -393,7 +393,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Cast: {
-			target := kind.typespec.base.constant_value.(^Type);
+			target := get_type(ws, kind.typespec.base.constant_value.(TypeID));
 			// todo: check if valid cast (can't cast string to int, for example)
 			complete_expr(node, target);
 			return .Ok;
@@ -403,15 +403,27 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			// Symbols aren't AST nodes, so the Ast_Identifier can't depend() on it like normal. Oh well.
 			sym := kind.sym;
 			assert(sym != nil);
-			if sym.inferred_type == nil {
+			if sym.decl_type == nil {
 				return Check_Result.Not_Checked;
 			}
 
-			if kind.is_type_ident {
-				complete_node(node);
-			}
-			else {
-				complete_expr(node, sym.inferred_type);
+			#complete
+			switch sym_type in sym.decl_type {
+				case Type_Decl: {
+					assert(sym_type.type.id != 0);
+					complete_expr(node, type_type_id);
+				}
+				case Proc_Decl: {
+					assert(sym_type.type != nil);
+					complete_expr(node, sym_type.type);
+				}
+				case Var_Decl: {
+					assert(sym_type.type != nil);
+					complete_expr(node, sym_type.type);
+				}
+				case: {
+					unhandledcase(sym_type);
+				}
 			}
 
 			if sym.constant_value != nil {
@@ -454,19 +466,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Var: {
 			declared_type: ^Type;
 			if kind.typespec != nil {
-				declared_type = kind.typespec.base.constant_value.(^Type);
+				declared_type = get_type(ws, kind.typespec.base.constant_value.(TypeID));
 			}
 			expr_type: ^Type;
 			if kind.expr != nil {
-				// note(josh): little bit janky. should figure out a better solution for type aliases
-				switch expr_kind in kind.expr.derived {
-					case Ast_Type_Expression: {
-						expr_type = expr_kind.base.constant_value.(^Type);
-					}
-					case: {
-						expr_type = kind.expr.expr_type;
-					}
-				}
+				expr_type = kind.expr.expr_type;
 			}
 
 			true_type: ^Type;
@@ -493,6 +497,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			kind.var_type = true_type;
 
+			if kind.is_constant && true_type == type_type_id {
+				assert(kind.expr != nil);
+				node.do_not_print = true; // don't print type aliases
+				complete_sym(kind.sym, Type_Decl{get_type(ws, kind.expr.constant_value.(TypeID))});
+			}
+			else {
+				complete_sym(kind.sym, Var_Decl{true_type});
+			}
+
 			if kind.is_constant {
 				assert(kind.expr != nil);
 				if kind.expr.constant_value == nil {
@@ -504,19 +517,19 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 
 			complete_node(node);
-			complete_sym(kind.sym, true_type);
+
 			return .Ok;
 		}
 
 		case Ast_Proc: {
 			if kind.return_typespec != nil {
-				kind.return_type = kind.return_typespec.base.constant_value.(^Type);
+				kind.return_type = get_type(ws, kind.return_typespec.base.constant_value.(TypeID));
 			}
 
 			t := get_or_make_type_proc(ws, kind);
 			kind.signature_type = t;
 			complete_node(node);
-			complete_sym(kind.sym, t);
+			complete_sym(kind.sym, Proc_Decl{t});
 			return .Ok;
 		}
 
@@ -527,14 +540,16 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 			t := make_type_struct(ws, kind.name, fields[:]);
 			complete_node(node);
-			complete_sym(kind.sym, t);
+			complete_sym(kind.sym, Type_Decl{t});
+			kind.sym.constant_value = t.id;
 			return .Ok;
 		}
 
 		case Ast_Typedef: {
-			t := make_type_distinct(ws, kind.name, kind.other.base.constant_value.(^Type));
+			t := make_type_distinct(ws, kind.name, get_type(ws, kind.other.base.constant_value.(TypeID)));
 			complete_node(node);
-			complete_sym(kind.sym, t);
+			complete_sym(kind.sym, Type_Decl{t});
+			kind.sym.constant_value = t.id;
 			return .Ok;
 		}
 
@@ -681,7 +696,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Type_Expression: {
-			node.constant_value = kind.typespec.base.constant_value.(^Type);
+			node.constant_value = kind.typespec.base.constant_value.(TypeID);
 			complete_expr(node, type_type_id);
 			return .Ok;
 		}
@@ -690,13 +705,19 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			#complete
 			switch typespec_kind in kind.kind {
 				case Typespec_Identifier: {
-					assert(typespec_kind.ident.sym.inferred_type != nil);
-					//logln(typespec_kind.ident.sym.name, typespec_kind.ident.sym.inferred_type);
-					complete_typespec(kind, typespec_kind.ident.sym.inferred_type);
-					return .Ok;
+					switch decl_type in typespec_kind.ident.sym.decl_type {
+						case Type_Decl: {
+							complete_typespec(kind, decl_type.type);
+							return .Ok;
+						}
+						case: {
+							error(typespec_kind.ident, "Expected a type, got ", typespec_kind.ident.name);
+							return .Error;
+						}
+					}
 				}
 				case Typespec_Dynamic_Array: {
-					array_of := typespec_kind.typespec.base.constant_value.(^Type);
+					array_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
 					t := get_or_make_type_dynamic_array_of(ws, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
@@ -712,21 +733,21 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						error(typespec_kind.size_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
-					array_of := typespec_kind.typespec.base.constant_value.(^Type);
+					array_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
 					t := get_or_make_type_array_of(ws, cast(uint)array_size, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Slice: {
-					slice_of := typespec_kind.typespec.base.constant_value.(^Type);
+					slice_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
 					t := get_or_make_type_slice_of(ws, slice_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Ptr: {
-					ptr_to := typespec_kind.typespec.base.constant_value.(^Type);
+					ptr_to := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
 					t := get_or_make_type_ptr_to(ws, ptr_to);
 					complete_typespec(kind, t);
 					return .Ok;
@@ -870,6 +891,11 @@ make_type :: proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_locati
 	new_type.kind = derived;
 	append(&ws.all_types, new_type);
 	return new_type;
+}
+
+get_type :: proc(ws: ^Workspace, id: TypeID) -> ^Type {
+	assert(id != 0);
+	return ws.all_types[cast(int)id-1];
 }
 
 make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type {
@@ -1033,7 +1059,7 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 complete_typespec :: inline proc(typespec: ^Ast_Typespec, t: ^Type, loc := #caller_location) {
 	assert(typespec != nil);
 	assert(t != nil);
-	typespec.constant_value = t;
+	typespec.constant_value = t.id;
 	complete_node(typespec.base);
 }
 
@@ -1049,10 +1075,6 @@ complete_expr :: inline proc(node: ^Ast_Node, t: ^Type, nil_type_is_ok := false,
 
 complete_node :: inline proc(node: ^Ast_Node) {
 	node.check_state = Check_State.Checked;
-}
-
-complete_sym :: inline proc(sym: ^Symbol, t: ^Type) {
-	sym.inferred_type = t;
 }
 
 

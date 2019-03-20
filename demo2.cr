@@ -4,13 +4,12 @@ const Hello = "Hello ";
 const World = "World!";
 const Hello_World = Hello + World;
 
-const Ptr_To_Int = #type ^int;
+const MyInt = int;
 
 proc main() {
-	var foo: int;
-	var other: Ptr_To_Int;
-	other = &foo;
-	foo = 1;
-	print_int(^other);
-	// print_string(Hello + World);
+	print_string(Hello + World);
+
+	var foo: int = 1;
+	var other: MyInt = 2;
+	print_int(foo + other);
 }

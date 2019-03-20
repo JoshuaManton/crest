@@ -93,8 +93,24 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 
 expr_to_string :: proc(node: ^Ast_Node) -> string {
 	assert(node != nil);
-
 	buf: strings.Builder;
+
+	if node.constant_value != nil {
+		#complete
+		switch const_kind in node.constant_value {
+			case i64:    sbprint(&buf, const_kind);
+			case TypeID: sbprint(&buf, cast(i64)const_kind);
+			case f64:    sbprint(&buf, const_kind);
+			case bool:   sbprint(&buf, const_kind);
+			case string: sbprint(&buf, "\"", const_kind, "\"");
+			case: {
+				unhandledcase(const_kind);
+			}
+		}
+
+		return strings.to_string(buf);
+	}
+
 	switch kind in &node.derived {
 		case Ast_Binary: {
 			sbprint(&buf, expr_to_string(kind.lhs), " ", kind.op.text, " ", expr_to_string(kind.rhs));
@@ -203,7 +219,8 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 }
 
 print_typedef :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Typedef) {
-	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.base.constant_value.(^Type)), ";\n");
+	// todo(josh): kinda lame that we need access to a workspace for this thing only
+	output(output_code, decl.name, " :: distinct ", type_to_odin_string(get_type(current_workspace, decl.other.base.constant_value.(TypeID))), ";\n");
 }
 
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
@@ -404,27 +421,7 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 
 	for _, idx in block.stmts {
 		stmt := block.stmts[idx];
-
-		// skip certain things
-		{
-			switch kind in stmt.derived {
-			case Ast_Directive_Assert: {
-				continue;
-			}
-			case Ast_Var: {
-				if kind.expr != nil {
-					if _, ok := kind.expr.derived.(Ast_Type_Expression); ok && kind.is_constant {
-						continue;
-					}
-				}
-			}
-			case Ast_Proc: {
-				if kind.flags & PROC_IS_ODIN_PROC > 0 do continue;
-			}
-			}
-		}
-
-
+		if stmt.do_not_print do continue;
 		indent(output_code);
 		assert(stmt != nil);
 		print_stmt(output_code, stmt);
@@ -437,14 +434,21 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 	}
 }
 
+@private
+current_workspace: ^Workspace; // @Jank
+
 gen_odin :: proc(workspace: ^Workspace) -> string {
 	ODIN_PREAMBLE ::
 `package output
 
 using import "core:fmt"
 
-`;
+type_id :: distinct int;
 
+`;
+	old_workspace := current_workspace;
+	current_workspace = workspace;
+	defer current_workspace = old_workspace;
 
 	output_code_buffer: [dynamic]u8;
 	output(&output_code_buffer, ODIN_PREAMBLE);

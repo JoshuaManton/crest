@@ -86,6 +86,8 @@ Ast_Var :: struct {
 	sym: ^Symbol,
 	is_constant: bool,
 	var_type: ^Type,
+
+	is_typedef: bool,
 }
 
 Ast_Struct :: struct {
@@ -107,7 +109,6 @@ Ast_Identifier :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	sym: ^Symbol,
-	is_type_ident: bool,
 }
 
 Ast_Assign :: struct {
@@ -281,6 +282,7 @@ Ast_Node :: struct {
 	depends: [dynamic]^Ast_Node,
 	expr_type: ^Type,
 	constant_value: Constant_Value,
+	do_not_print: bool,
 }
 
 Depend_Entry :: struct {
@@ -293,7 +295,7 @@ Constant_Value :: union {
 	f64,
 	bool,
 	string,
-	Pointer_To_Type,
+	TypeID,
 }
 
 Pointer_To_Type :: ^Type;

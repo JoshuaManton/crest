@@ -73,6 +73,7 @@ _alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #ca
 		nil,
 		nil,
 		nil,
+		false,
 	};
 
 	return cast(^T)ptr;
@@ -184,7 +185,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 	token := peek();
 	if token.kind == Ident {
 		token = next_token();
-		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil, true});
+		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
 		queue_identifier_for_resolving(ws, symbol);
 		ident_typespec := node(ws, token, Ast_Typespec{{}, Typespec_Identifier{symbol}});
 		depend(ws, ident_typespec, symbol);
@@ -295,7 +296,7 @@ parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 		}
 		case Ident: {
 			ident := token.text;
-			sym := node(ws, token, Ast_Identifier{{}, token.text, nil, false});
+			sym := node(ws, token, Ast_Identifier{{}, token.text, nil});
 			queue_identifier_for_resolving(ws, sym);
 			return sym.base;
 		}
@@ -526,7 +527,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false});
 	}
 
 	if is_token(Colon) {
@@ -546,7 +547,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -576,7 +577,7 @@ currently_parsing_procedure: ^Ast_Proc;
 
 PROC_IS_ODIN_PROC : u32 : 1 << 0;
 
-try_parse_proc_directives :: proc(ws: ^Workspace) -> u32 {
+try_parse_proc_directives :: proc(ws: ^Workspace, node: ^Ast_Node) -> u32 {
 	flags: u32;
 	for true {
 		directive := try_parse_directive(ws);
@@ -584,6 +585,7 @@ try_parse_proc_directives :: proc(ws: ^Workspace) -> u32 {
 		switch directive.directive {
 			case "#odin": {
 				flags |= PROC_IS_ODIN_PROC;
+				node.do_not_print = true;
 			}
 		}
 	}
@@ -619,7 +621,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 
 	expect(Right_Paren);
 
-	flags := try_parse_proc_directives(ws);
+	flags := try_parse_proc_directives(ws, procedure_stmt);
 
 	return_type: ^Ast_Typespec;
 	if !is_token(Left_Curly) && !is_token(Semicolon) {
@@ -831,6 +833,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			directive := expect(Directive_Assert);
 			condition := parse_expr(ws);
 			n := node(ws, directive, Ast_Directive_Assert{{}, condition}).base;
+			n.do_not_print = true;
 			depend(ws, n, condition);
 			return n;
 		}
