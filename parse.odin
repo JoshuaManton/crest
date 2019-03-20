@@ -187,7 +187,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 		token = next_token();
 		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
 		queue_identifier_for_resolving(ws, symbol);
-		ident_typespec := node(ws, token, Ast_Typespec{{}, Typespec_Identifier{symbol}});
+		ident_typespec := node(ws, token, Ast_Typespec{{}, nil, Typespec_Identifier{symbol}});
 		depend(ws, ident_typespec, symbol);
 		return ident_typespec;
 	}
@@ -205,7 +205,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 
 		expect(Right_Curly);
 
-		union_node := node(ws, token, Ast_Typespec{{}, Typespec_Union{types[:]}});
+		union_node := node(ws, token, Ast_Typespec{{}, nil, Typespec_Union{types[:]}});
 
 		// todo: factor this into the loop above
 		for t in types {
@@ -224,7 +224,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 		if peek().kind == Right_Square {
 			next_token();
 			typespec := parse_typespec(ws);
-			slice := node(ws, token, Ast_Typespec{{}, Typespec_Slice{typespec}});
+			slice := node(ws, token, Ast_Typespec{{}, nil, Typespec_Slice{typespec}});
 			depend(ws, slice, typespec);
 			return slice;
 		}
@@ -233,7 +233,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 			next_token();
 			expect(Right_Square);
 			typespec := parse_typespec(ws);
-			dynamic_array := node(ws, token, Ast_Typespec{{}, Typespec_Dynamic_Array{typespec}});
+			dynamic_array := node(ws, token, Ast_Typespec{{}, nil, Typespec_Dynamic_Array{typespec}});
 			depend(ws, dynamic_array, typespec);
 			return dynamic_array;
 		}
@@ -244,14 +244,14 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 		typespec := parse_typespec(ws);
 		depend(ws, typespec, array_length_expr);
 
-		array := node(ws, token, Ast_Typespec{{}, Typespec_Array{array_length_expr, typespec}});
+		array := node(ws, token, Ast_Typespec{{}, nil, Typespec_Array{array_length_expr, typespec}});
 		depend(ws, array, typespec);
 		return array;
 	}
 
 	assert(modifier.kind == Xor);
 	typespec := parse_typespec(ws);
-	ptr := node(ws, token, Ast_Typespec{{}, Typespec_Ptr{typespec}});
+	ptr := node(ws, token, Ast_Typespec{{}, nil, Typespec_Ptr{typespec}});
 	depend(ws, ptr, typespec);
 	return ptr;
 }

@@ -219,8 +219,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 }
 
 print_typedef :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Typedef) {
-	// todo(josh): kinda lame that we need access to a workspace for this thing only
-	output(output_code, decl.name, " :: distinct ", type_to_odin_string(get_type(current_workspace, decl.other.base.constant_value.(TypeID))), ";\n");
+	output(output_code, decl.name, " :: distinct ", type_to_odin_string(decl.other.completed_type), ";\n");
 }
 
 print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
@@ -434,9 +433,6 @@ print_block :: proc(output_code: ^[dynamic]u8, block: ^Ast_Block) {
 	}
 }
 
-@private
-current_workspace: ^Workspace; // @Jank
-
 gen_odin :: proc(workspace: ^Workspace) -> string {
 	ODIN_PREAMBLE ::
 `package output
@@ -446,9 +442,6 @@ using import "core:fmt"
 type_id :: distinct int;
 
 `;
-	old_workspace := current_workspace;
-	current_workspace = workspace;
-	defer current_workspace = old_workspace;
 
 	output_code_buffer: [dynamic]u8;
 	output(&output_code_buffer, ODIN_PREAMBLE);

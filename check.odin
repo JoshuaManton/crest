@@ -1028,12 +1028,12 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 
 
 
-// todo(josh): typespecs and expressions are different things right now and maybe they shouldn't be
 complete_typespec :: inline proc(typespec: ^Ast_Typespec, t: ^Type, loc := #caller_location) {
 	assert(typespec != nil);
 	assert(t != nil);
+	typespec.completed_type = t;
 	typespec.constant_value = t.id;
-	complete_node(typespec.base);
+	complete_expr(typespec.base, type_type_id);
 }
 
 complete_expr :: inline proc(node: ^Ast_Node, t: ^Type, nil_type_is_ok := false, loc := #caller_location) {

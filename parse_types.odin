@@ -2,7 +2,7 @@ package crest
 
 Ast_Typespec :: struct {
 	using base: ^Ast_Node,
-	// real type is stored in base.constant_value
+	completed_type: ^Type,
 	kind: union {
 		Typespec_Identifier,
 		Typespec_Ptr,
