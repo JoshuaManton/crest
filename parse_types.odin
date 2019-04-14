@@ -74,7 +74,7 @@ Ast_Proc :: struct {
 	return_type: ^Type,
 	sym: ^Symbol,
 
-	var_declarations: [dynamic]^Ast_Var,
+	variables: [dynamic]^Ast_Var,
 	output_name: string,
 }
 
@@ -85,7 +85,7 @@ Ast_Var :: struct {
 	expr: ^Ast_Node,
 	sym: ^Symbol,
 	is_constant: bool,
-	var_type: ^Type,
+	type: ^Type,
 
 	is_typedef: bool,
 }
@@ -113,7 +113,7 @@ Ast_Identifier :: struct {
 
 Ast_Assign :: struct {
 	using base: ^Ast_Node,
-	op: Token_Type,
+	op: Operator,
 	left: ^Ast_Node,
 	right: ^Ast_Node,
 }
@@ -170,20 +170,13 @@ Ast_Call :: struct {
 
 Ast_Unary :: struct {
 	using base: ^Ast_Node,
-	op: Token,
+	op: Operator,
 	rhs: ^Ast_Node,
-}
-
-Ast_Range :: struct {
-	using base: ^Ast_Node,
-	lhs: ^Ast_Node,
-	min: ^Ast_Node,
-	max: ^Ast_Node,
 }
 
 Ast_Binary :: struct {
 	using base: ^Ast_Node,
-	op: Token,
+	op: Operator,
 	lhs: ^Ast_Node,
 	rhs: ^Ast_Node,
 }
@@ -203,12 +196,6 @@ Ast_Subscript :: struct {
 	using base: ^Ast_Node,
 	left: ^Ast_Node,
 	index: ^Ast_Node,
-}
-
-Ast_Slice :: struct {
-	using base: ^Ast_Node,
-	array: ^Ast_Node,
-	range: ^Ast_Range,
 }
 
 Ast_Selector :: struct {
@@ -257,12 +244,10 @@ Ast_Node :: struct {
 		Ast_Identifier,
 		Ast_Call,
 		Ast_Unary,
-		Ast_Range,
 		Ast_Binary,
 		Ast_Cast,
 		Ast_Sizeof,
 		Ast_Subscript,
-		Ast_Slice,
 		Ast_Selector,
 		Ast_Paren,
 		Ast_String,

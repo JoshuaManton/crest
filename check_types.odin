@@ -56,11 +56,18 @@ Type :: struct {
 		Type_Proc,
 	},
 	id:   TypeID,
-	size: uint,
+	aligned_size: uint,
+	operators: map[Operator]Operator_Info,
 }
 
 Check_State :: enum {
 	Unchecked,
 	// Checking,
 	Checked,
+}
+
+Operator_Info :: struct {
+	result_type: ^Type,
+	constant_evaluation_procedure: proc(Constant_Value, Constant_Value) -> Constant_Value,
+	constant_only: bool,
 }

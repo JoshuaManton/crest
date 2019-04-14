@@ -27,8 +27,8 @@ output :: inline proc(output_code: ^[dynamic]u8, strings: ..string) {
 type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> string {
 	assert(canonical_type != nil, aprintln(loc));
 
-	if canonical_type == type_float       do return "f32";
-	if canonical_type == type_untyped_int do return "i32";
+	if canonical_type == type_float do return "f32";
+	if canonical_type == type_int   do return "i32";
 
 	#complete
 	switch kind in canonical_type.kind {
@@ -113,18 +113,21 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 
 	switch kind in &node.derived {
 		case Ast_Binary: {
-			sbprint(&buf, expr_to_string(kind.lhs), " ", kind.op.text, " ", expr_to_string(kind.rhs));
+			sbprint(&buf, expr_to_string(kind.lhs), " ", operator_to_odin_operator(kind.op), " ", expr_to_string(kind.rhs));
 		}
 
 		case Ast_Unary: {
-			using Token_Type;
-			switch kind.op.kind {
-				case Plus, Minus, And, Not: {
-					sbprint(&buf, kind.op.text, expr_to_string(kind.rhs));
-				}
-				case Xor: {
-					sbprint(&buf, expr_to_string(kind.rhs), kind.op.text);
-				}
+			op_str := operator_to_odin_operator(kind.op);
+			switch kind.op {
+				case .Plus:        sbprint(&buf, op_str, expr_to_string(kind.rhs));
+				case .Minus:       sbprint(&buf, op_str, expr_to_string(kind.rhs));
+				case .Ampersand:   sbprint(&buf, op_str, expr_to_string(kind.rhs));
+				case .Boolean_Not: sbprint(&buf, op_str, expr_to_string(kind.rhs));
+				case .Bit_Not:     sbprint(&buf, op_str, expr_to_string(kind.rhs));
+				case .Bit_Xor:     sbprint(&buf, op_str, expr_to_string(kind.rhs));
+
+				case .Dereference: sbprint(&buf, expr_to_string(kind.rhs), "^");
+
 				case: unhandledcase(kind.op);
 			}
 		}
@@ -164,18 +167,18 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 			return kind.name;
 		}
 
-		case Ast_Slice: {
-			sbprint(&buf, expr_to_string(kind.array), "[");
-			if kind.range.min != nil {
-				sbprint(&buf, expr_to_string(kind.range.min));
-			}
-			sbprint(&buf, ":");
-			if kind.range.max != nil {
-				sbprint(&buf, expr_to_string(kind.range.max));
-			}
+		// case Ast_Slice: {
+		// 	sbprint(&buf, expr_to_string(kind.array), "[");
+		// 	if kind.range.min != nil {
+		// 		sbprint(&buf, expr_to_string(kind.range.min));
+		// 	}
+		// 	sbprint(&buf, ":");
+		// 	if kind.range.max != nil {
+		// 		sbprint(&buf, expr_to_string(kind.range.max));
+		// 	}
 
-			sbprint(&buf, "]");
-		}
+		// 	sbprint(&buf, "]");
+		// }
 
 		case Ast_Subscript: {
 			sbprint(&buf, expr_to_string(kind.left), "[");
@@ -189,6 +192,57 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 	}
 
 	return strings.to_string(buf);
+}
+
+operator_to_odin_operator :: proc(op: Operator) -> string {
+	#complete
+	switch op {
+		case .Plus:                          return "+";
+		case .Minus:                         return "-";
+		case .Multiply:                      return "*";
+		case .Divide:                        return "/";
+		case .Mod:                           return "%";
+		case .Mod_Mod:                       return "%%";
+
+		case .Boolean_Not:                   return "!";
+		case .Boolean_Or:                    return "||";
+		case .Boolean_And:                   return "&&";
+		case .Boolean_Equal:                 return "==";
+		case .Boolean_Not_Equal:             return "!=";
+		case .Boolean_Less_Than:             return "<";
+		case .Boolean_Greater_Than:          return ">";
+		case .Boolean_Less_Than_Or_Equal:    return "<=";
+		case .Boolean_Greater_Than_Or_Equal: return ">=";
+
+
+		case .Bit_Not:                       return "~";
+		case .Bit_Xor:                       return "^";
+		case .Bit_Or:                        return "|";
+		case .Bit_And:                       return "&";
+		case .Bit_Shift_Left:                return "<<";
+		case .Bit_Shift_Right:               return ">>";
+
+		case .Address:                       return "&";
+		case .Dereference:                   return "^";
+
+		case .Dot_Dot:                       return "..";
+
+		case .Assign:                        return "=";
+		case .Plus_Assign:                   return "+=";
+		case .Minus_Assign:                  return "-=";
+		case .Multiply_Assign:               return "*=";
+		case .Divide_Assign:                 return "/=";
+		case .Mod_Assign:                    return "%=";
+		case .Or_Assign:                     return "|=";
+		case .Bit_And_Assign:                return "&=";
+		case .Bit_Xor_Assign:                return "^=";
+		case .Bit_Shift_Left_Assign:         return "<<=";
+		case .Bit_Shift_Right_Assign:        return ">>=";
+
+		case .Ampersand:                     assert(false);
+	}
+	unreachable();
+	return {};
 }
 
 print_var_decl :: proc(output_code: ^[dynamic]u8, name: string, type: ^Type, expr: ^Ast_Node, is_constant: bool = false) {
@@ -210,7 +264,7 @@ print_struct_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Struct) {
 	for _, idx in decl.fields {
 		field := decl.fields[idx];
 		indent(output_code);
-		print_var_decl(output_code, field.name, field.var_type, nil);
+		print_var_decl(output_code, field.name, field.type, nil);
 		output(output_code, ",\n");
 	}
 	pop_indent();
@@ -234,7 +288,7 @@ print_proc_decl :: proc(output_code: ^[dynamic]u8, decl: ^Ast_Proc) {
 		param := decl.params[idx];
 		output(output_code, comma);
 		comma = ", ";
-		print_var_decl(output_code, param.name, param.var_type, param.expr);
+		print_var_decl(output_code, param.name, param.type, param.expr);
 	}
 
 	output(output_code, ")");
@@ -281,23 +335,7 @@ print_if_stmt :: proc(output_code: ^[dynamic]u8, if_stmt: ^Ast_If) {
 print_assign_stmt :: proc(output_code: ^[dynamic]u8, assign: ^Ast_Assign) {
 	using Token_Type;
 	op := "";
-
-	switch assign.op {
-		case Assign:             { op = " = "; }
-		case Plus_Assign:        { op = " += "; }
-		case Minus_Assign:       { op = " -= "; }
-		case Multiply_Assign:    { op = " *= "; }
-		case Divide_Assign:      { op = " /= "; }
-		case Mod_Assign:         { op = " %= "; }
-		case Or_Assign:          { op = " |= "; }
-		case And_Assign:         { op = " &= "; }
-		case Xor_Assign:         { op = " ^= "; }
-		case LShift_Assign:      { op = " <<= "; }
-		case RShift_Assign:      { op = " >>= "; }
-		case:                    { assert(false); }
-	}
-
-	output(output_code, expr_to_string(assign.left), op, expr_to_string(assign.right), ";\n");
+	output(output_code, expr_to_string(assign.left), operator_to_odin_operator(assign.op), expr_to_string(assign.right), ";\n");
 }
 
 print_return_stmt :: proc(output_code: ^[dynamic]u8, ret: ^Ast_Return) {
@@ -313,11 +351,11 @@ print_loop :: proc(output_code: ^[dynamic]u8, loop: ^Ast_Node) {
 	switch kind in &loop.derived {
 		case Ast_While: {
 			output(output_code, expr_to_string(kind.condition), " ");
-			print_block(output_code, loop.parent);
+			print_block(output_code, kind.block);
 		}
 		case Ast_For_Each: {
 			output(output_code, kind.var.name, " in ", expr_to_string(kind.array), " ");
-			print_block(output_code, loop.parent);
+			print_block(output_code, kind.block);
 		}
 		case: {
 			logln("Unhandled for loop kind in print_loop(): ", kind^);
@@ -380,7 +418,7 @@ print_stmt :: proc(output_code: ^[dynamic]u8, stmt: ^Ast_Node) {
 			print_return_stmt(output_code, kind);
 		}
 		case Ast_Var: {
-			print_var_decl(output_code, kind.name, kind.var_type, kind.expr, kind.is_constant);
+			print_var_decl(output_code, kind.name, kind.type, kind.expr, kind.is_constant);
 			output(output_code, ";\n");
 		}
 		case Ast_Assign: {

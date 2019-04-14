@@ -14,7 +14,7 @@ proc procedures() {
 		return value * value;
 	}
 
-	print_float(sqr(3) * sqr(5));
+	// print_float(sqr(3) * sqr(5));
 }
 
 proc variables() {
@@ -44,8 +44,8 @@ proc structs() {
 	}
 
 	var vec: Vector2;
-	vec.x = 1;
-	vec.y = 4;
+	vec.x = 1.0;
+	vec.y = 4.0;
 
 	const MyInt = int; // type alias
 	#assert MyInt == int
@@ -63,8 +63,8 @@ proc structs() {
 proc arrays() {
 	const N = 16;
 	var arr: [N]float;
-	arr[0] = 76;
-	arr[2] = 123;
+	arr[0] = 76.0;
+	arr[2] = 123.0;
 	print_float(arr[0]);
 	print_float(arr[2]);
 }

@@ -20,7 +20,10 @@ main :: proc() {
 		return;
 	}
 
+
+
 	gen_odin(&workspace);
+	// generate_and_execute_workspace(&workspace);
 }
 
 Workspace :: struct {
@@ -31,5 +34,9 @@ Workspace :: struct {
 	nodes_to_typecheck: [dynamic]^Ast_Node,
 	all_types: [dynamic]^Type,
 	all_procedures: [dynamic]^Ast_Proc,
+	all_global_variables: [dynamic]^Ast_Var,
+
+	// ir_procedures: [dynamic]^IR_Procedure,
+	// ir_global_fields: [dynamic]^IR_Field,
 }
 

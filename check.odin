@@ -32,11 +32,14 @@ type_float: ^Type;
 type_bool: ^Type;
 
 type_string: ^Type;
+// type_dynamic_array: ^Type;
+// type_slice: ^Type;
 
 type_type_id: ^Type;
 
-type_untyped_int:   ^Type;
-type_untyped_float: ^Type;
+// todo(josh): untyped numbers
+// type_untyped_int:   ^Type;
+// type_untyped_float: ^Type;
 
 init_builtin_types :: proc(using ws: ^Workspace) {
 	if type_i8 == nil {
@@ -44,30 +47,105 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		type_i16 = make_type(ws, 2, Type_Primitive{"i16"}); create_symbol(ws.global_scope, "i16",   type_i16);
 		type_i32 = make_type(ws, 4, Type_Primitive{"i32"}); create_symbol(ws.global_scope, "i32",   type_i32);
 		type_i64 = make_type(ws, 8, Type_Primitive{"i64"}); create_symbol(ws.global_scope, "i64",   type_i64);
-		type_int = make_type_distinct(ws, "int", type_i32); create_symbol(ws.global_scope, "int",   type_int);
+		type_int = type_i32; create_symbol(ws.global_scope, "int", type_i32);
 
 		type_u8   = make_type(ws, 1, Type_Primitive{"u8"});   create_symbol(ws.global_scope, "u8",    type_u8);
 		type_u16  = make_type(ws, 2, Type_Primitive{"u16"});  create_symbol(ws.global_scope, "u16",   type_u16);
 		type_u32  = make_type(ws, 4, Type_Primitive{"u32"});  create_symbol(ws.global_scope, "u32",   type_u32);
 		type_u64  = make_type(ws, 8, Type_Primitive{"u64"});  create_symbol(ws.global_scope, "u64",   type_u64);
-		type_uint = make_type_distinct(ws, "uint", type_u32); create_symbol(ws.global_scope, "uint",  type_uint);
+		type_uint = type_u32; create_symbol(ws.global_scope, "uint",  type_u32);
 
 		type_f32   = make_type(ws, 4, Type_Primitive{"f32"});   create_symbol(ws.global_scope, "f32",   type_f32);
 		type_f64   = make_type(ws, 8, Type_Primitive{"f64"});   create_symbol(ws.global_scope, "f64",   type_f64);
-		type_float = make_type_distinct(ws, "float", type_f32); create_symbol(ws.global_scope, "float", type_float);
+		type_float = type_f32; create_symbol(ws.global_scope, "float", type_f32);
 
 		type_bool = make_type(ws, 1, Type_Primitive{"bool"}); create_symbol(ws.global_scope, "bool",   type_bool);
 
-		fields := [?]Field{
+		string_fields := [?]Field{
 			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
 			{"length", type_int},
 		};
-		type_string = make_type_struct(ws, "string", fields[:]); create_symbol(ws.global_scope, "string", type_string);
+		type_string = make_type_struct(ws, "string", string_fields[:]); create_symbol(ws.global_scope, "string", type_string);
+
+
+		// slice_fields := [?]Field{
+		// 	{"data",   get_or_make_type_ptr_to(ws, type_u8)},
+		// 	{"length", type_int},
+		// };
+		// type_slice = make_type_struct(ws, "slice", slice_fields[:]);
+
+		// dynamic_array_fields := [?]Field{
+		// 	{"data",   get_or_make_type_ptr_to(ws, type_u8)},
+		// 	{"length", type_int},
+		// };
+		// type_dynamic_array = make_type_struct(ws, "dynamic array", dynamic_array_fields[:]);
 
 		type_type_id = make_type_distinct(ws, "type_id", type_int); create_symbol(ws.global_scope, "type_id", type_type_id);
 
-		type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
-		type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
+		// todo(josh): untyped numbers
+		// type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
+		// type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
+
+
+
+
+		// ints
+		for t in ([?]^Type{type_i8, type_i16, type_i32, type_i64}) {
+			add_equality_operators(t, i64);
+			add_less_and_greater_than_operators(t, i64);
+			add_math_operators(t, i64);
+			add_mod_and_mod_mod(t, i64);
+		}
+		// uints
+		for t in ([?]^Type{type_u8, type_u16, type_u32, type_u64}) {
+			add_equality_operators(t, i64);
+			add_less_and_greater_than_operators(t, i64);
+			add_math_operators(t, i64);
+		}
+		// floats
+		for t in ([?]^Type{type_f32, type_f64}) {
+			add_equality_operators(t, f64);
+			add_less_and_greater_than_operators(t, f64);
+			add_math_operators(t, f64);
+		}
+		// string
+		add_equality_operators(type_string, string);
+		type_add_operator(type_string, .Plus, type_string, proc(a, b: Constant_Value) -> Constant_Value { return aprint(a.(string), b.(string)); }, true);
+		// bool
+		add_equality_operators(type_bool, bool);
+		// type_id
+		add_equality_operators(type_type_id, TypeID);
+
+
+
+		add_math_operators :: proc(type: ^Type, $Constant_Type: typeid) {
+			assert(type != nil);
+			type_add_operator(type, .Plus,     type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) + b.(Constant_Type); });
+			type_add_operator(type, .Minus,    type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) - b.(Constant_Type); });
+			type_add_operator(type, .Multiply, type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) * b.(Constant_Type); });
+			type_add_operator(type, .Divide,   type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) / b.(Constant_Type); });
+		}
+
+		add_mod_and_mod_mod :: proc(type: ^Type, $Constant_Type: typeid) {
+			assert(type != nil);
+			type_add_operator(type, .Mod,     type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) %  b.(Constant_Type); });
+			type_add_operator(type, .Mod_Mod, type, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) %% b.(Constant_Type); });
+		}
+
+		add_equality_operators :: proc(type: ^Type, $Constant_Type: typeid) {
+			assert(type != nil);
+			type_add_operator(type, .Boolean_Equal,     type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) == b.(Constant_Type); });
+			type_add_operator(type, .Boolean_Not_Equal, type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) != b.(Constant_Type); });
+		}
+
+		add_less_and_greater_than_operators :: proc(type: ^Type, $Constant_Type: typeid) {
+			assert(type != nil);
+			type_add_operator(type, .Boolean_Less_Than,             type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) <  b.(Constant_Type); });
+			type_add_operator(type, .Boolean_Greater_Than,          type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) >  b.(Constant_Type); });
+			type_add_operator(type, .Boolean_Less_Than_Or_Equal,    type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) <= b.(Constant_Type); });
+			type_add_operator(type, .Boolean_Greater_Than_Or_Equal, type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) >= b.(Constant_Type); });
+
+		}
 	}
 }
 
@@ -151,11 +229,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			#complete
 			switch value in kind.value {
 				case f64: {
-					t = type_untyped_float;
+					t = type_f32;
 					node.constant_value = value;
 				}
 				case i64: {
-					t = type_untyped_int;
+					t = type_i32;
 					node.constant_value = value;
 				}
 			}
@@ -173,33 +251,55 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Unary: {
 			// todo(josh): this is probably severely incomplete
 			assert(kind.rhs.expr_type != nil);
-			t := kind.rhs.expr_type;
-			switch kind.op.kind {
-				case .Not: {
-					assert(kind.rhs.expr_type == type_bool);
-					t = type_bool;
+			rhs_type := kind.rhs.expr_type;
+			result_type := rhs_type;
+			switch kind.op {
+				case .Boolean_Not: {
+					if rhs_type != type_bool {
+						error(node, "Unary operator `!` is not valid for type ", type_to_string(rhs_type));
+						return .Error;
+					}
+					if kind.rhs.constant_value != nil {
+						node.constant_value = !kind.rhs.constant_value.(bool);
+					}
 				}
-				case .Plus, .Minus: {
+				case .Plus: {
 					// all good
 				}
-				case .Xor: { // deref
-					ptr, ok := t.kind.(Type_Ptr);
-					if !ok {
-						error(node, "Cannot dereference a non-pointer type, given ", type_to_string(t));
+				case .Minus: {
+					if !is_numeric_type(rhs_type) {
+						error(node, "Unary operator `-` is not valid for type ", type_to_string(rhs_type));
 						return .Error;
 					}
 
-					t = ptr.ptr_to;
+					if kind.rhs.constant_value != nil {
+						switch constant_kind in kind.rhs.constant_value {
+							case i64: node.constant_value = -constant_kind;
+							case f64: node.constant_value = -constant_kind;
+							case:     assert(false, tprint(constant_kind));
+						}
+						node.constant_value = !kind.rhs.constant_value.(bool);
+					}
 				}
-				case .And: { // take address
-					t = get_or_make_type_ptr_to(ws, t);
+				case .Dereference: {
+					ptr, ok := kind.rhs.expr_type.kind.(Type_Ptr);
+					if !ok {
+						error(node, "Cannot dereference a non-pointer type ", type_to_string(rhs_type));
+						return .Error;
+					}
+					result_type = ptr.ptr_to;
+				}
+				case .Ampersand: assert(false, "Ampersand should have gotten converted to Address by now");
+				case .Address: { // take address
+					result_type = get_or_make_type_ptr_to(ws, rhs_type);
 				}
 				case: {
-					unhandledcase(kind.op.kind);
+					logln(site(node.root_token.site));
+					unhandledcase(kind.op);
 				}
 			}
 
-			complete_expr(node, t);
+			complete_expr(node, result_type);
 			return .Ok;
 		}
 
@@ -207,131 +307,32 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			ltype := kind.lhs.expr_type;
 			rtype := kind.rhs.expr_type;
 
-			if !is_assignable_to(ltype, rtype) && !is_assignable_to(rtype, ltype) {
+			if !types_match(ltype, rtype) && !types_match(rtype, ltype) {
 				type_mismatch(ltype, kind.rhs);
 				return .Error;
 			}
 
-			if kind.lhs.constant_value != nil && kind.rhs.constant_value != nil {
-				value := evaluate_constant_value(kind.op.kind, kind.lhs.constant_value, kind.rhs.constant_value);
-				assert(value != nil); // nil means the types didn't match we shouldn't have gotten this far if that is true
-				node.constant_value = value;
+			operator_info, ok := type_get_operator(ltype, kind.op);
+			if !ok {
+				error(kind.lhs, "Binary operator ", kind.op, " does not exist for type ", type_to_string(ltype));
+				return .Error;
+			}
 
-				evaluate_constant_value :: proc(op: Token_Type, a: Constant_Value, b: Constant_Value) -> Constant_Value {
-					assert(a != nil);
-					assert(b != nil);
-
-					// we can assume the types of a and b match
-
-					value: Constant_Value;
-
-					#complete
-					switch lhs in a {
-					case TypeID: {
-						rhs := b.(TypeID);
-						switch op {
-							case .Equal:         value = lhs == rhs;
-							case .Not_Equal:     value = lhs != rhs;
-							case: unhandledcase(op);
-						}
-					}
-					case string: {
-						rhs := b.(string);
-						switch op {
-							case .Plus:          value = aprint(lhs, rhs);
-							case .Equal:         value = lhs == rhs;
-							case .Not_Equal:     value = lhs != rhs;
-
-							// todo(josh): these cases compile but I have no idea what they do
-							// case .Less:          value = lhs < rhs;
-							// case .Greater:       value = lhs > rhs;
-							// case .Less_Equal:    value = lhs <= rhs;
-							// case .Greater_Equal: value = lhs >= rhs;
-
-							case: unhandledcase(op);
-						}
-					}
-					case bool: {
-						rhs := b.(bool);
-						switch op {
-							case .Equal:         value = lhs == rhs;
-							case .Not_Equal:     value = lhs != rhs;
-							case .And_And:       value = lhs && rhs;
-							case .Or_Or:         value = lhs || rhs;
-							case: unhandledcase(op);
-						}
-					}
-					case f64: {
-						rhs := b.(f64);
-						switch op {
-							case .Plus:          value = lhs + rhs;
-							case .Minus:         value = lhs - rhs;
-							case .Multiply:      value = lhs * rhs;
-							case .Divide:        value = lhs / rhs;
-							case .Equal:         value = lhs == rhs;
-							case .Not_Equal:     value = lhs != rhs;
-							case .Less:          value = lhs < rhs;
-							case .Greater:       value = lhs > rhs;
-							case .Less_Equal:    value = lhs <= rhs;
-							case .Greater_Equal: value = lhs >= rhs;
-							case: unhandledcase(op);
-						}
-					}
-					case i64: {
-						rhs := b.(i64);
-						switch op {
-						case .Plus:     value = lhs + rhs;
-						case .Minus:    value = lhs - rhs;
-						case .Multiply: value = lhs * rhs;
-						case .Divide:   value = lhs / rhs;
-						case .Mod:      value = lhs % rhs;
-						case .Mod_Mod:  value = lhs %% rhs;
-						case .And:      value = lhs & rhs;
-						case .Or:       value = lhs | rhs;
-						case .Xor:      value = lhs ~ rhs;
-						case .LShift:   {
-							if rhs < 0 {
-								// todo(josh): error handling
-								logln("Shift amount must be an unsigned integer.");
-								return nil;
-							}
-							value = lhs << cast(u64)rhs;
-						}
-						case .RShift:   {
-							if rhs < 0 {
-								// todo(josh): error handling
-								logln("Shift amount must be an unsigned integer.");
-								return nil;
-							}
-							value = lhs >> cast(u64)rhs;
-						}
-						case .Equal:         value = lhs == rhs;
-						case .Not_Equal:     value = lhs != rhs;
-						case .Less:          value = lhs < rhs;
-						case .Greater:       value = lhs > rhs;
-						case .Less_Equal:    value = lhs <= rhs;
-						case .Greater_Equal: value = lhs >= rhs;
-						case: unhandledcase(op);
-						}
-					}
-					}
-
-					return value;
+			both_constant := kind.lhs.constant_value != nil && kind.rhs.constant_value != nil;
+			if both_constant {
+				assert(operator_info.constant_evaluation_procedure != nil);
+				result := operator_info.constant_evaluation_procedure(kind.lhs.constant_value, kind.rhs.constant_value);
+				assert(result != nil);
+				node.constant_value = result;
+			}
+			else {
+				if operator_info.constant_only {
+					error(kind.lhs, "Binary operator ", kind.op, " for type ", type_to_string(ltype), " requires two constant values.");
 				}
 			}
 
-			t: ^Type;
-			switch kind.op.kind {
-				case Token_Type.NUMBER_OPS_BEGIN..Token_Type.NUMBER_OPS_END: {
-					t = ltype;
-				}
-				case Token_Type.BOOL_OPS_BEGIN..Token_Type.BOOL_OPS_END: {
-					t = type_bool;
-				}
-				case: {
-					unhandledcase(kind.op.kind);
-				}
-			}
+			t: ^Type = operator_info.result_type;
+			assert(t != nil);
 			complete_expr(node, t);
 			return .Ok;
 		}
@@ -359,7 +360,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			assert(kind.left.expr_type != nil);
 			left := kind.left.expr_type;
 
-			if !ensure_is_assignable_to(type_int, kind.index) do return .Error;
+			if !ensure_types_match(type_int, kind.index) do return .Error;
 			t := (&left.kind.(Type_Array)).array_of;
 			complete_expr(node, t);
 			return .Ok;
@@ -448,7 +449,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			true_type: ^Type;
 			if declared_type != nil && expr_type != nil {
-				if !ensure_is_assignable_to(declared_type, kind.expr) do return .Error;
+				if !ensure_types_match(declared_type, kind.expr) do return .Error;
 				true_type = declared_type;
 			}
 
@@ -463,12 +464,13 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				return .Error;
 			}
 
-			if true_type == type_untyped_int   do true_type = type_int;
-			if true_type == type_untyped_float do true_type = type_float;
+			// todo(josh): untyped numbers
+			// if true_type == type_untyped_int   do true_type = type_int;
+			// if true_type == type_untyped_float do true_type = type_float;
 
 			assert(true_type != nil);
 
-			kind.var_type = true_type;
+			kind.type = true_type;
 
 			if kind.is_constant && true_type == type_type_id {
 				assert(kind.expr != nil);
@@ -491,6 +493,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			complete_node(node);
 
+			if ws.current_scope == ws.global_scope {
+				append(&ws.all_global_variables, kind);
+			}
+
 			return .Ok;
 		}
 
@@ -509,7 +515,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Struct: {
 			fields: [dynamic]Field;
 			for field in kind.fields {
-				append(&fields, Field{field.name, field.var_type});
+				append(&fields, Field{field.name, field.type});
 			}
 			t := make_type_struct(ws, kind.name, fields[:]);
 			complete_node(node);
@@ -537,7 +543,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			for _, idx in kind.params {
 				param := kind.params[idx];
-				ensure_is_assignable_to(proc_type.params[idx].inferred_type, param);
+				ensure_types_match(proc_type.params[idx].inferred_type, param);
 			}
 
 			complete_expr(node, proc_type.return_type, true);
@@ -549,63 +555,63 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// 	return .Ok;
 		// }
 
-		case Ast_Range: {
-			min_type: ^Type;
-			max_type: ^Type;
+		// case Ast_Range: {
+		// 	min_type: ^Type;
+		// 	max_type: ^Type;
 
-			if kind.min == nil {
-				min_type = type_int;
-			}
-			else {
-				assert(kind.min.expr_type != nil);
-				min_type = kind.min.expr_type;
-				ensure_is_assignable_to(type_int, kind.min);
-			}
+		// 	if kind.min == nil {
+		// 		min_type = type_int;
+		// 	}
+		// 	else {
+		// 		assert(kind.min.expr_type != nil);
+		// 		min_type = kind.min.expr_type;
+		// 		ensure_types_match(type_int, kind.min);
+		// 	}
 
-			if kind.max == nil {
-				max_type = type_int;
-			}
-			else {
-				assert(kind.max.expr_type != nil);
-				max_type = kind.max.expr_type;
-				ensure_is_assignable_to(type_int, kind.max);
-			}
+		// 	if kind.max == nil {
+		// 		max_type = type_int;
+		// 	}
+		// 	else {
+		// 		assert(kind.max.expr_type != nil);
+		// 		max_type = kind.max.expr_type;
+		// 		ensure_types_match(type_int, kind.max);
+		// 	}
 
-			t: ^Type;
-			if kind.lhs != nil {
-				assert(kind.lhs.expr_type != nil);
-				t = kind.lhs.expr_type;
-			}
-			else {
-				t = type_int;
-			}
-			complete_expr(node, t);
-			return .Ok;
-		}
+		// 	t: ^Type;
+		// 	if kind.lhs != nil {
+		// 		assert(kind.lhs.expr_type != nil);
+		// 		t = kind.lhs.expr_type;
+		// 	}
+		// 	else {
+		// 		t = type_int;
+		// 	}
+		// 	complete_expr(node, t);
+		// 	return .Ok;
+		// }
 
-		case Ast_Slice: {
-			assert(kind.array.expr_type != nil);
-			array_type := kind.array.expr_type;
-			array_of: ^Type;
-			switch array_kind in array_type.kind {
-				case Type_Array: {
-					array_of = array_kind.array_of;
-				}
-				case Type_Dynamic_Array: {
-					array_of = array_kind.array_of;
-				}
-				case Type_Slice: {
-					array_of = array_kind.slice_of;
-				}
-				case: {
-					error(kind.array, "Cannot slice type: ", type_to_string(array_type));
-					return .Error;
-				}
-			}
-			slice_type := get_or_make_type_slice_of(ws, array_of);
-			complete_expr(node, slice_type);
-			return .Ok;
-		}
+		// case Ast_Slice: {
+		// 	assert(kind.array.expr_type != nil);
+		// 	array_type := kind.array.expr_type;
+		// 	array_of: ^Type;
+		// 	switch array_kind in array_type.kind {
+		// 		case Type_Array: {
+		// 			array_of = array_kind.array_of;
+		// 		}
+		// 		case Type_Dynamic_Array: {
+		// 			array_of = array_kind.array_of;
+		// 		}
+		// 		case Type_Slice: {
+		// 			array_of = array_kind.slice_of;
+		// 		}
+		// 		case: {
+		// 			error(kind.array, "Cannot slice type: ", type_to_string(array_type));
+		// 			return .Error;
+		// 		}
+		// 	}
+		// 	slice_type := get_or_make_type_slice_of(ws, array_of);
+		// 	complete_expr(node, slice_type);
+		// 	return .Ok;
+		// }
 
 		case Ast_For_I: {
 			panic("Unsupported");
@@ -627,19 +633,19 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_If: {
-			ensure_is_assignable_to(type_bool, kind.condition);
+			ensure_types_match(type_bool, kind.condition);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Else_If: {
-			ensure_is_assignable_to(type_bool, kind.condition);
+			ensure_types_match(type_bool, kind.condition);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_While: {
-			ensure_is_assignable_to(type_bool, kind.condition);
+			ensure_types_match(type_bool, kind.condition);
 			complete_node(node);
 			return .Ok;
 		}
@@ -648,7 +654,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			assert(kind.array.expr_type != nil);
 			assert(kind.var.base.check_state == .Checked);
 			t := get_base_type(kind.array.expr_type);
-			ensure_is_assignable_to(t, kind.var.base);
+			ensure_types_match(t, kind.var.base);
 			complete_node(node);
 			return .Ok;
 		}
@@ -656,14 +662,14 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Assign: {
 			assert(kind.left.expr_type != nil);
 			left := kind.left.expr_type;
-			ensure_is_assignable_to(left, kind.right);
+			ensure_types_match(left, kind.right);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Return: {
 			assert(kind.procedure.signature_type != nil);
-			ensure_is_assignable_to(kind.procedure.signature_type.kind.(Type_Proc).return_type, kind.expr);
+			ensure_types_match(kind.procedure.signature_type.kind.(Type_Proc).return_type, kind.expr);
 			complete_node(node);
 			return .Ok;
 		}
@@ -793,8 +799,8 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 
 
-ensure_is_assignable_to :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) -> bool {
-	if !is_assignable_to(wanted, given.expr_type, loc) {
+ensure_types_match :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) -> bool {
+	if !types_match(wanted, given.expr_type, loc) {
 		type_mismatch(wanted, given, loc);
 		return false;
 	}
@@ -805,7 +811,7 @@ type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) 
 	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.expr_type));
 }
 
-is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
+types_match :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
 	//
 	if wanted == nil && given != nil do return false;
 	if wanted != nil && given == nil do return false;
@@ -813,11 +819,12 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 	//
 	if wanted == given do return true;
 
+	// todo(josh): untyped_numbers
 	//
-	if is_signed_integer_type(wanted) && given == type_untyped_int do return true;
+	// if is_signed_integer_type(wanted) && given == type_untyped_int do return true;
 
-	if is_float_type(wanted) && given == type_untyped_int   do return true;
-	if is_float_type(wanted) && given == type_untyped_float do return true;
+	// if is_float_type(wanted) && given == type_untyped_int   do return true;
+	// if is_float_type(wanted) && given == type_untyped_float do return true;
 
 	//
 	// @UnionTypes
@@ -834,16 +841,13 @@ is_assignable_to :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_loca
 
 
 
-is_signed_integer_type :: proc(t: ^Type) -> bool {
+is_numeric_type :: proc(t: ^Type) -> bool {
 	switch t {
-		case type_i8, type_i16, type_i32, type_i64, type_int: return true;
-	}
-	return false;
-}
-
-is_float_type :: proc(t: ^Type) -> bool {
-	switch t {
-		case type_f32, type_f64, type_float: return true;
+	case type_i8,  type_i16, type_i32, type_i64,
+	     type_u8,  type_u16, type_u32, type_u64,
+	     type_f32, type_f64: {
+	     	return true;
+	     }
 	}
 	return false;
 }
@@ -855,12 +859,33 @@ is_pointer_type :: proc(t: ^Type) -> bool {
 	return false;
 }
 
+is_array_type :: proc(t: ^Type) -> bool {
+	switch kind in t.kind {
+		case Type_Array: return true;
+	}
+	return false;
+}
 
+
+
+// note(josh): need some kind of system for this, 8 is just what the VM's alignment is so we'll use that for now
+TARGET_PLATFORM_ALIGNMENT :: 8;
 
 make_type :: proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
+	align_forward :: proc(val: uint, align: uint) -> uint {
+		a := align;
+		p := val;
+		modulo := p & (a-1);
+		if modulo != 0 do p += a - modulo;
+		return p;
+	}
+
 	new_type := new(Type);
 	new_type.id = cast(TypeID)len(ws.all_types)+1;
-	new_type.size = size;
+
+	aligned_size := align_forward(size, TARGET_PLATFORM_ALIGNMENT);
+	new_type.aligned_size = aligned_size;
+
 	new_type.kind = derived;
 	append(&ws.all_types, new_type);
 	return new_type;
@@ -880,15 +905,15 @@ make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type 
 	case Type_Primitive: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, new_t.size, kind);
+		return make_type(ws, new_t.aligned_size, kind);
 	}
 	case Type_Struct: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, new_t.size, kind);
+		return make_type(ws, new_t.aligned_size, kind);
 	}
 	case: {
-		return make_type(ws, new_t.size, new_t.kind);
+		return make_type(ws, new_t.aligned_size, new_t.kind);
 	}
 	}
 	unreachable();
@@ -900,12 +925,23 @@ make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type
 	size : uint = 0;
 	for var in fields {
 		assert(var.inferred_type != nil);
-		size += var.inferred_type.size;
+		size += var.inferred_type.aligned_size;
 	}
 
 	assert(size != 0);
 	new_type := make_type(ws, size, Type_Struct{name, fields});
 	return new_type;
+}
+
+type_add_operator :: proc(type: ^Type, operator: Operator, result_type: ^Type, constant_eval_proc: proc(Constant_Value, Constant_Value) -> Constant_Value, constant_only := false, loc := #caller_location) {
+	assert(type != nil, tprint(loc));
+	assert(result_type != nil, tprint(loc));
+	type.operators[operator] = Operator_Info{result_type, constant_eval_proc, constant_only};
+}
+
+type_get_operator :: proc(type: ^Type, operator: Operator) -> (Operator_Info, bool) {
+	info, ok := type.operators[operator];
+	return info, ok;
 }
 
 get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^Type {
@@ -932,7 +968,7 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 	params: [dynamic]Field;
 	for _, idx in declaration.params {
 		param := declaration.params[idx];
-		t := param.var_type;
+		t := param.type;
 		append(&params, Field{param.name, t});
 	}
 
@@ -994,7 +1030,7 @@ get_or_make_type_dynamic_array_of :: proc(using ws: ^Workspace, array_of: ^Type)
 }
 
 get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: ^Type) -> ^Type {
-	assert(array_of.size != 0);
+	assert(array_of.aligned_size != 0);
 	if all_types != nil {
 		for other_type in all_types {
 			if other_array, ok := other_type.kind.(Type_Array); ok {
@@ -1137,3 +1173,122 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 unhandledcase :: proc(value: $T, loc := #caller_location) -> ! {
 	panic(tprint("Unhandled case at ", pretty_location(loc), ": ", value));
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// value := evaluate_constant_value(kind.op, kind.lhs.constant_value, kind.rhs.constant_value);
+				// assert(value != nil); // nil means the types didn't match we shouldn't have gotten this far if that is true
+				// node.constant_value = value;
+
+				// evaluate_constant_value :: proc(op: , a, b: Constant_Value) -> Constant_Value {
+				// 	assert(a != nil);
+				// 	assert(b != nil);
+
+				// 	// we can assume the types of a and b match
+
+				// 	value: Constant_Value;
+
+				// 	#complete
+				// 	switch lhs in a {
+				// 	case TypeID: {
+				// 		rhs := b.(TypeID);
+				// 		switch op {
+				// 			case .Equal:         value = lhs == rhs;
+				// 			case .Not_Equal:     value = lhs != rhs;
+				// 			case: unhandledcase(op);
+				// 		}
+				// 	}
+				// 	case string: {
+				// 		rhs := b.(string);
+				// 		switch op {
+				// 			case .Plus:          value = aprint(lhs, rhs);
+				// 			case .Equal:         value = lhs == rhs;
+				// 			case .Not_Equal:     value = lhs != rhs;
+
+				// 			// todo(josh): these cases compile but I have no idea what they do
+				// 			// case .Less:          value = lhs < rhs;
+				// 			// case .Greater:       value = lhs > rhs;
+				// 			// case .Less_Equal:    value = lhs <= rhs;
+				// 			// case .Greater_Equal: value = lhs >= rhs;
+
+				// 			case: unhandledcase(op);
+				// 		}
+				// 	}
+				// 	case bool: {
+				// 		rhs := b.(bool);
+				// 		switch op {
+				// 			case .Equal:         value = lhs == rhs;
+				// 			case .Not_Equal:     value = lhs != rhs;
+				// 			case .And_And:       value = lhs && rhs;
+				// 			case .Or_Or:         value = lhs || rhs;
+				// 			case: unhandledcase(op);
+				// 		}
+				// 	}
+				// 	case f64: {
+				// 		rhs := b.(f64);
+				// 		switch op {
+				// 			case .Plus:          value = lhs + rhs;
+				// 			case .Minus:         value = lhs - rhs;
+				// 			case .Multiply:      value = lhs * rhs;
+				// 			case .Divide:        value = lhs / rhs;
+				// 			case .Equal:         value = lhs == rhs;
+				// 			case .Not_Equal:     value = lhs != rhs;
+				// 			case .Less:          value = lhs < rhs;
+				// 			case .Greater:       value = lhs > rhs;
+				// 			case .Less_Equal:    value = lhs <= rhs;
+				// 			case .Greater_Equal: value = lhs >= rhs;
+				// 			case: unhandledcase(op);
+				// 		}
+				// 	}
+				// 	case i64: {
+				// 		rhs := b.(i64);
+				// 		switch op {
+				// 		case .Plus:     value = lhs + rhs;
+				// 		case .Minus:    value = lhs - rhs;
+				// 		case .Multiply: value = lhs * rhs;
+				// 		case .Divide:   value = lhs / rhs;
+				// 		case .Mod:      value = lhs % rhs;
+				// 		case .Mod_Mod:  value = lhs %% rhs;
+				// 		case .And:      value = lhs & rhs;
+				// 		case .Or:       value = lhs | rhs;
+				// 		case .Xor:      value = lhs ~ rhs;
+				// 		case .LShift:   {
+				// 			if rhs < 0 {
+				// 				// todo(josh): error handling
+				// 				logln("Shift amount must be an unsigned integer.");
+				// 				return nil;
+				// 			}
+				// 			value = lhs << cast(u64)rhs;
+				// 		}
+				// 		case .RShift:   {
+				// 			if rhs < 0 {
+				// 				// todo(josh): error handling
+				// 				logln("Shift amount must be an unsigned integer.");
+				// 				return nil;
+				// 			}
+				// 			value = lhs >> cast(u64)rhs;
+				// 		}
+				// 		case .Equal:         value = lhs == rhs;
+				// 		case .Not_Equal:     value = lhs != rhs;
+				// 		case .Less:          value = lhs < rhs;
+				// 		case .Greater:       value = lhs > rhs;
+				// 		case .Less_Equal:    value = lhs <= rhs;
+				// 		case .Greater_Equal: value = lhs >= rhs;
+				// 		case: unhandledcase(op);
+				// 		}
+				// 	}
+				// 	}
+
+				// 	return value;
+				// }

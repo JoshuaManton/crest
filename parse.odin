@@ -137,9 +137,9 @@ expect :: proc(kinds: ..Token_Type, loc := #caller_location) -> Token {
 
 
 is_assign_op :: proc() -> bool {
-	using Token_Type;
-	kind := peek().kind;
-	return cast(i32)kind > cast(i32)ASSIGN_BEGIN && cast(i32)kind < cast(i32)ASSIGN_END;
+	token := peek();
+	if token.kind != .Operator do return false;
+	return cast(i32)token.operator >= cast(i32)(Operator.ASSIGN_BEGIN) && cast(i32)token.operator <= cast(i32)(Operator.ASSIGN_END);
 }
 
 is_postfix_op :: proc() -> bool {
@@ -151,9 +151,10 @@ is_postfix_op :: proc() -> bool {
 }
 
 is_unary_op :: proc() -> bool {
-	using Token_Type;
-	switch peek().kind {
-		case Plus, Minus, Xor, And, Not: {
+	token := peek();
+	if token.kind != .Operator do return false;
+	switch token.operator {
+		case .Plus, .Minus, .Bit_Xor, .Bit_And, .Ampersand, .Boolean_Not: {
 			return true;
 		}
 	}
@@ -162,21 +163,36 @@ is_unary_op :: proc() -> bool {
 }
 
 is_mul_op :: proc() -> bool {
-	using Token_Type;
-	kind := peek().kind;
-	return cast(i32)kind > cast(i32)MUL_BEGIN && cast(i32)kind < cast(i32)MUL_END;
+	token := peek();
+	if token.kind != .Operator do return false;
+	op := token.operator;
+	return cast(i32)op >= cast(i32)Operator.MULTIPLICATIVE_BEGIN && cast(i32)op <= cast(i32)Operator.MULTIPLICATIVE_END;
 }
 
 is_add_op :: proc() -> bool {
-	using Token_Type;
-	kind := peek().kind;
-	return cast(i32)kind > cast(i32)ADD_BEGIN && cast(i32)kind < cast(i32)ADD_END;
+	token := peek();
+	if token.kind != .Operator do return false;
+	op := token.operator;
+	return cast(i32)op >= cast(i32)Operator.ADDITIVE_BEGIN && cast(i32)op <= cast(i32)Operator.ADDITIVE_END;
 }
 
 is_cmp_op :: proc() -> bool {
-	using Token_Type;
-	kind := peek().kind;
-	return cast(i32)kind > cast(i32)CMP_BEGIN && cast(i32)kind < cast(i32)CMP_END;
+	token := peek();
+	if token.kind != .Operator do return false;
+	op := token.operator;
+	return cast(i32)op >= cast(i32)Operator.COMPARATIVE_BEGIN && cast(i32)op <= cast(i32)Operator.COMPARATIVE_END;
+}
+
+is_and_op :: proc() -> bool {
+	token := peek();
+	if token.kind != .Operator do return false;
+	return token.operator == .Boolean_And;
+}
+
+is_or_op :: proc() -> bool {
+	token := peek();
+	if token.kind != .Operator do return false;
+	return token.operator == .Boolean_Or;
 }
 
 parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
@@ -219,8 +235,8 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 		assert(false, "cannot do proc types yet");
 	}
 
-	modifier := expect(Left_Square, Xor);
-	if modifier.kind == Left_Square {
+	modifier_token := next_token();
+	if modifier_token.kind == Left_Square {
 		if peek().kind == Right_Square {
 			next_token();
 			typespec := parse_typespec(ws);
@@ -229,7 +245,8 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 			return slice;
 		}
 
-		if peek().kind == Dot_Dot {
+
+		if dot_dot := peek(); dot_dot.kind == .Operator && dot_dot.operator == .Dot_Dot {
 			next_token();
 			expect(Right_Square);
 			typespec := parse_typespec(ws);
@@ -249,7 +266,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 		return array;
 	}
 
-	assert(modifier.kind == Xor);
+	assert(modifier_token.kind == .Operator && modifier_token.operator == .Bit_Xor);
 	typespec := parse_typespec(ws);
 	ptr := node(ws, token, Ast_Typespec{{}, nil, Typespec_Ptr{typespec}});
 	depend(ws, ptr, typespec);
@@ -351,33 +368,9 @@ parse_base_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 				}
 			}
 			case Left_Square: {
-				expression: ^Ast_Node;
-
-				if !is_token(Dot_Dot) {
-					expression = parse_expr(ws);
-				}
-
-				if is_token(Dot_Dot) {
-					next_token();
-
-					min := expression;
-					max: ^Ast_Node;
-					if !is_token(Right_Square) {
-						max = parse_expr(ws);
-					}
-
-					range := node(ws, op, Ast_Range{{}, current_expr, min, max});
-					if min != nil do depend(ws, range, min);
-					if max != nil do depend(ws, range, max);
-					next_expr = node(ws, token, Ast_Slice{{}, current_expr, range}).base;
-					depend(ws, next_expr, current_expr);
-					depend(ws, next_expr, range);
-				}
-				else {
-					next_expr = node(ws, token, Ast_Subscript{{}, current_expr, expression}).base;
-					depend(ws, next_expr, current_expr);
-				}
-
+				expression := parse_expr(ws);
+				next_expr = node(ws, token, Ast_Subscript{{}, current_expr, expression}).base;
+				depend(ws, next_expr, current_expr);
 				expect(Right_Square);
 			}
 			case: {
@@ -397,9 +390,11 @@ parse_unary_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
 
 	if is_unary_op() {
-		op := next_token();
+		op_token := next_token();
 		rhs := parse_unary_expr(ws);
-		node := node(ws, op, Ast_Unary{{}, op, rhs});
+		op := op_token.operator;
+		if op == .Ampersand do op = .Address;
+		node := node(ws, op_token, Ast_Unary{{}, op, rhs});
 		depend(ws, node, rhs);
 		return node.base;
 	}
@@ -424,9 +419,11 @@ parse_mul_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	token := peek();
 	current_expr := parse_unary_expr(ws);
 	for is_mul_op() {
-		op := next_token();
+		op_token := next_token();
 		rhs := parse_unary_expr(ws);
 		lhs := current_expr;
+		op := op_token.operator;
+		if op == .Ampersand do op = .Bit_And;
 		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
@@ -440,9 +437,10 @@ parse_add_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	token := peek();
 	current_expr := parse_mul_expr(ws);
 	for is_add_op() {
-		op := next_token();
+		op_token := next_token();
 		rhs := parse_mul_expr(ws);
 		lhs := current_expr;
+		op := op_token.operator;
 		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
@@ -456,9 +454,10 @@ parse_cmp_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 	token := peek();
 	current_expr := parse_add_expr(ws);
 	for is_cmp_op() {
-		op := next_token();
+		op_token := next_token();
 		rhs := parse_add_expr(ws);
 		lhs := current_expr;
+		op := op_token.operator;
 		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
@@ -471,11 +470,12 @@ parse_and_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 
 	token := peek();
 	current_expr := parse_cmp_expr(ws);
-	for is_token(And_And) {
-		op := next_token();
+	for is_and_op() {
+		op_token := next_token();
+		assert(op_token.operator == .Boolean_And);
 		rhs := parse_cmp_expr(ws);
 		lhs := current_expr;
-		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		current_expr = node(ws, token, Ast_Binary{{}, .Boolean_And, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
 	}
@@ -488,11 +488,12 @@ parse_or_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 
 	token := peek();
 	current_expr := parse_and_expr(ws);
-	for is_token(Or_Or) {
-		op := next_token();
+	for is_or_op() {
+		op_token := next_token();
+		assert(op_token.operator == .Boolean_Or);
 		rhs := parse_and_expr(ws);
 		lhs := current_expr;
-		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		current_expr = node(ws, token, Ast_Binary{{}, .Boolean_Or, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
 	}
@@ -536,7 +537,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	}
 
 	if !is_token(In) {
-		if is_token(Assign) {
+		if assign_token := peek(); assign_token.kind == .Operator && assign_token.operator == .Assign {
 			next_token();
 			value = parse_expr(ws);
 		}
@@ -695,23 +696,6 @@ parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Node {
 	return n;
 }
 
-parse_range_or_single_expr :: proc(ws: ^Workspace) -> (^Ast_Node, bool) {
-	using Token_Type;
-
-	token := peek();
-	expr1 := parse_expr(ws);
-	if is_token(Dot_Dot) {
-		next_token();
-		expr2 := parse_expr(ws);
-		node := node(ws, token, Ast_Range{{}, nil, expr1, expr2});
-		depend(ws, node, expr1);
-		depend(ws, node, expr2);
-		return node.base, true;
-	}
-
-	return expr1, false;
-}
-
 parse_if_stmt :: proc(ws: ^Workspace) -> ^Ast_If {
 	using Token_Type;
 
@@ -768,51 +752,35 @@ parse_loop :: proc(ws: ^Workspace) -> ^Ast_Node {
 		depend(ws, while_stmt, block);
 		return while_stmt.base;
 	}
-	else {
-		assert(root_token.kind == For);
-		if is_token(Var) || is_token(Semicolon) {
-			// for i
-			var: ^Ast_Var;
-			if !is_token(Semicolon) {
-				var = parse_var_decl(ws, true);
-			}
-			expect(Semicolon);
-			condition: ^Ast_Node;
-			if !is_token(Semicolon) {
-				condition = parse_expr(ws);
-			}
-			expect(Semicolon);
 
-			post_stmt: ^Ast_Node;
-			if !is_token(Left_Curly) {
-				post_stmt = parse_stmt(ws);
-			}
+	assert(root_token.kind == For);
+	// C-style for loop
 
-			block := parse_block(ws);
-			loop := node(ws, root_token, Ast_For_I{{}, var, condition, post_stmt, block});
-
-			if var != nil do depend(ws, loop, var);
-			if condition != nil do depend(ws, loop, condition);
-			if post_stmt != nil do depend(ws, loop, post_stmt);
-			depend(ws, loop, block);
-
-			return loop.base;
-		}
-		else {
-			// for each
-			var := parse_var_decl(ws, false);
-			expect(In);
-			expr, is_range := parse_range_or_single_expr(ws);
-
-			block := parse_block(ws);
-			loop := node(ws, root_token, Ast_For_Each{{}, var, expr, block});
-
-			depend(ws, loop, var);
-			depend(ws, loop, block);
-
-			return loop.base;
-		}
+	var: ^Ast_Var;
+	if !is_token(Semicolon) {
+		var = parse_var_decl(ws, true);
 	}
+	expect(Semicolon);
+	condition: ^Ast_Node;
+	if !is_token(Semicolon) {
+		condition = parse_expr(ws);
+	}
+	expect(Semicolon);
+
+	post_stmt: ^Ast_Node;
+	if !is_token(Left_Curly) {
+		post_stmt = parse_stmt(ws);
+	}
+
+	block := parse_block(ws);
+	loop := node(ws, root_token, Ast_For_I{{}, var, condition, post_stmt, block});
+
+	if var != nil do depend(ws, loop, var);
+	if condition != nil do depend(ws, loop, condition);
+	if post_stmt != nil do depend(ws, loop, post_stmt);
+	depend(ws, loop, block);
+
+	return loop.base;
 }
 
 parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
@@ -849,7 +817,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			var := parse_var_decl(ws);
 			expect(Semicolon);
 			if currently_parsing_procedure != nil {
-				append(&currently_parsing_procedure.var_declarations, var);
+				append(&currently_parsing_procedure.variables, var);
 			}
 			return var.base;
 		}
@@ -892,24 +860,6 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			return stmt.base;
 		}
 		case: {
-			parse_assign_stmt :: proc(ws: ^Workspace, lhs: ^Ast_Node) -> ^Ast_Node {
-				if !is_assign_op() {
-					t := peek();
-					println("Syntax error: Expected assign operator, got", t.kind, "at", site(t.site));
-					assert(false);
-				}
-
-				op := next_token();
-				rhs := parse_expr(ws);
-				stmt := node(ws, op, Ast_Assign{{}, op.kind, lhs, rhs});
-				expect(Semicolon);
-
-				depend(ws, stmt, lhs);
-				depend(ws, stmt, rhs);
-
-				return stmt.base;
-			}
-
 			root_token := peek();
 			expr := parse_expr(ws);
 			switch kind in expr.derived {
@@ -918,7 +868,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 					return expr;
 				}
 				case Ast_Unary: {
-					if (cast(^Ast_Unary)expr).op.kind == Xor { // dereference assignment
+					if kind.op == .Dereference { // dereference assignment, ^var = 1;
 						stmt := parse_assign_stmt(ws, expr);
 						return stmt;
 					}
@@ -936,6 +886,25 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 					assert(false, err);
 					return nil;
 				}
+			}
+
+			parse_assign_stmt :: proc(ws: ^Workspace, lhs: ^Ast_Node) -> ^Ast_Node {
+				if !is_assign_op() {
+					t := peek();
+					println("Syntax error: Expected assign operator, got", t.kind, "at", site(t.site));
+					assert(false);
+				}
+
+				op_token := next_token();
+				rhs := parse_expr(ws);
+				op := op_token.operator;
+				stmt := node(ws, op_token, Ast_Assign{{}, op, lhs, rhs});
+				expect(Semicolon);
+
+				depend(ws, stmt, lhs);
+				depend(ws, stmt, rhs);
+
+				return stmt.base;
 			}
 		}
 	}
