@@ -1,4 +1,4 @@
-#include "print.cr"
+#include "print.cr" // `#includes` are currently textual but I think I'd prefer a semantic include in the future
 
 proc main() {
 	procedures();
@@ -13,8 +13,7 @@ proc procedures() {
 	proc sqr(var value: float) float {
 		return value * value;
 	}
-
-	// print_float(sqr(3) * sqr(5));
+	print_float(sqr(3) * sqr(5));
 }
 
 proc variables() {
@@ -35,6 +34,7 @@ proc loops() {
 	while i > 0 {
 		i -= 1;
 	}
+	// todo: c-style for loop and foreach
 }
 
 proc structs() {
@@ -63,8 +63,8 @@ proc structs() {
 proc arrays() {
 	const N = 16;
 	var arr: [N]float;
-	arr[0] = 76.0;
-	arr[2] = 123.0;
+	arr[0] = 76;
+	arr[2] = 123;
 	print_float(arr[0]);
 	print_float(arr[2]);
 }
