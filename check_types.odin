@@ -56,7 +56,7 @@ Type :: struct {
 		Type_Proc,
 	},
 	id:   TypeID,
-	aligned_size: uint,
+	packed_size: uint,
 	operators: map[Operator]Operator_Info,
 }
 

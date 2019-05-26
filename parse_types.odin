@@ -74,7 +74,7 @@ Ast_Proc :: struct {
 	return_type: ^Type,
 	sym: ^Symbol,
 
-	variables: [dynamic]^Ast_Var,
+	vars: [dynamic]^Ast_Var,
 	output_name: string,
 }
 
@@ -88,6 +88,7 @@ Ast_Var :: struct {
 	type: ^Type,
 
 	is_typedef: bool,
+	offset_in_stack_frame: uint,
 }
 
 Ast_Struct :: struct {

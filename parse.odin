@@ -6,20 +6,9 @@ using import "core:fmt"
 
 using import "shared:workbench/logging"
 
-parse_workspace :: proc(ws: ^Workspace, filename: string) -> bool {
+parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block = nil) -> bool {
 	assert(ws != nil);
 
-	assert(ws.global_scope == nil);
-	ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
-
-	if !parse_file(ws, filename, ws.global_scope) {
-		return false;
-	}
-
-	return true;
-}
-
-parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block, loc := #caller_location) -> bool {
 	bytes, file_ok := os.read_entire_file(filename);
 	if !file_ok {
 		logln("Couldn't open file: ", filename);
@@ -27,7 +16,16 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block, loc := #
 	}
 
 	text := cast(string)bytes;
-	assert(len(text) > 0);
+	parse_text(ws, text, scope, filename);
+	return true;
+}
+
+parse_text :: proc(ws: ^Workspace, text: string, scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
+	if scope == nil {
+		assert(ws.global_scope == nil);
+		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
+		scope = ws.global_scope;
+	}
 
 	push_new_lexer_text(filename, text);
 	defer pop_lexer();
@@ -37,8 +35,6 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block, loc := #
 	defer ws.current_scope = old_block;
 
 	parse_stmt_list(ws);
-
-	return true;
 }
 
 parse_stmt_list :: proc(ws: ^Workspace) {
@@ -47,6 +43,10 @@ parse_stmt_list :: proc(ws: ^Workspace) {
 	for !is_token(Eof) && !is_token(Right_Curly) {
 		stmt := parse_stmt(ws);
 		if include, ok := stmt.derived.(Ast_Directive_Include); ok {
+			if ws.current_scope != ws.global_scope {
+				error(stmt, "`#include` is only allowed at global scope.");
+				assert(false); // todo(josh): error handling
+			}
 			parse_file(ws, include.filename, ws.current_scope);
 		}
 		else {
@@ -528,7 +528,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false, 0});
 	}
 
 	if is_token(Colon) {
@@ -548,7 +548,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false, 0});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -817,7 +817,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			var := parse_var_decl(ws);
 			expect(Semicolon);
 			if currently_parsing_procedure != nil {
-				append(&currently_parsing_procedure.variables, var);
+				append(&currently_parsing_procedure.vars, var);
 			}
 			return var.base;
 		}

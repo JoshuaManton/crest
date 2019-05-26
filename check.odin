@@ -229,11 +229,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			#complete
 			switch value in kind.value {
 				case f64: {
-					t = type_f32;
+					t = type_float;
 					node.constant_value = value;
 				}
 				case i64: {
-					t = type_i32;
+					t = type_int;
 					node.constant_value = value;
 				}
 			}
@@ -278,7 +278,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 							case f64: node.constant_value = -constant_kind;
 							case:     assert(false, tprint(constant_kind));
 						}
-						node.constant_value = !kind.rhs.constant_value.(bool);
 					}
 				}
 				case .Dereference: {
@@ -872,23 +871,20 @@ is_array_type :: proc(t: ^Type) -> bool {
 TARGET_PLATFORM_ALIGNMENT :: 8;
 
 make_type :: proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
-	align_forward :: proc(val: uint, align: uint) -> uint {
-		a := align;
-		p := val;
-		modulo := p & (a-1);
-		if modulo != 0 do p += a - modulo;
-		return p;
-	}
-
 	new_type := new(Type);
 	new_type.id = cast(TypeID)len(ws.all_types)+1;
-
-	aligned_size := align_forward(size, TARGET_PLATFORM_ALIGNMENT);
-	new_type.aligned_size = aligned_size;
-
+	new_type.packed_size = size;
 	new_type.kind = derived;
 	append(&ws.all_types, new_type);
 	return new_type;
+}
+
+align_forward :: proc(val: uint, align: uint) -> uint {
+	a := align;
+	p := val;
+	modulo := p & (a-1);
+	if modulo != 0 do p += a - modulo;
+	return p;
 }
 
 get_type :: proc(ws: ^Workspace, id: TypeID) -> ^Type {
@@ -905,15 +901,15 @@ make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type 
 	case Type_Primitive: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, new_t.aligned_size, kind);
+		return make_type(ws, new_t.packed_size, kind);
 	}
 	case Type_Struct: {
 		kind := type_kind^;
 		kind.name = new_name;
-		return make_type(ws, new_t.aligned_size, kind);
+		return make_type(ws, new_t.packed_size, kind);
 	}
 	case: {
-		return make_type(ws, new_t.aligned_size, new_t.kind);
+		return make_type(ws, new_t.packed_size, new_t.kind);
 	}
 	}
 	unreachable();
@@ -925,7 +921,7 @@ make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type
 	size : uint = 0;
 	for var in fields {
 		assert(var.inferred_type != nil);
-		size += var.inferred_type.aligned_size;
+		size += var.inferred_type.packed_size;
 	}
 
 	assert(size != 0);
@@ -1030,7 +1026,7 @@ get_or_make_type_dynamic_array_of :: proc(using ws: ^Workspace, array_of: ^Type)
 }
 
 get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: ^Type) -> ^Type {
-	assert(array_of.aligned_size != 0);
+	assert(array_of.packed_size != 0);
 	if all_types != nil {
 		for other_type in all_types {
 			if other_array, ok := other_type.kind.(Type_Array); ok {

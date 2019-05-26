@@ -8,7 +8,7 @@ using import "shared:workbench/logging"
 main :: proc() {
 	workspace: Workspace;
 
-	parse_ok := parse_workspace(&workspace, os.args[1]);
+	parse_ok := parse_file(&workspace, os.args[1]);
 	if !parse_ok {
 		println("There were errors, exiting.");
 		return;
@@ -22,8 +22,8 @@ main :: proc() {
 
 
 
-	gen_odin(&workspace);
-	// generate_and_execute_workspace(&workspace);
+	// gen_odin(&workspace);
+	generate_and_execute_workspace(&workspace);
 }
 
 Workspace :: struct {
