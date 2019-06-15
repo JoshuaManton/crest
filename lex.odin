@@ -97,7 +97,8 @@ Operator :: enum {
 	Boolean_Not,                   // !
 	Bit_Not,                       // ~
 
-	Ampersand,                     // &    note(josh): right now at lex time we don't know if a & is a bitwise AND or a var address (&var), so we use this in lexing and then the parser will overwrite it with the correct value (Bit_And or Address)
+	Caret,                         // &    note(josh): at lex time we don't know if a ^ is a bitwise XOR or a var deref   (^var), so we use this in lexing and then the parser will overwrite it with the correct value (Bit_Xor or Dereference)
+	Ampersand,                     // &    note(josh): at lex time we don't know if a & is a bitwise AND or a var address (&var), so we use this in lexing and then the parser will overwrite it with the correct value (Bit_And or Address)
 
 	Address,                       // &var
 	Dereference,                   // ^var
@@ -418,7 +419,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 		}
 		case '^': {
 			token_type = .Operator;
-			token_operator = .Bit_Xor;
+			token_operator = .Caret;
 			token_text = "^";
 			if program_text[lex_idx+1] == '=' {
 				inc();

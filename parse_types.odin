@@ -7,7 +7,7 @@ Ast_Typespec :: struct {
 		Typespec_Identifier,
 		Typespec_Ptr,
 		Typespec_Array,
-		Typespec_Dynamic_Array,
+		Typespec_List,
 		Typespec_Slice,
 		Typespec_Union,
 	}
@@ -22,11 +22,11 @@ Typespec_Ptr :: struct {
 }
 
 Typespec_Array :: struct {
-	size_expr: ^Ast_Node,
+	length_expr: ^Ast_Node,
 	typespec: ^Ast_Typespec,
 }
 
-Typespec_Dynamic_Array :: struct {
+Typespec_List :: struct {
 	typespec: ^Ast_Typespec,
 }
 
@@ -72,9 +72,9 @@ Ast_Proc :: struct {
 
 	signature_type: ^Type,
 	return_type: ^Type,
-	sym: ^Symbol,
+	declaration: ^_Declaration,
 
-	vars: [dynamic]^Ast_Var,
+	variables: [dynamic]^Ast_Var,
 	output_name: string,
 }
 
@@ -83,19 +83,19 @@ Ast_Var :: struct {
 	name: string,
 	typespec: ^Ast_Typespec,
 	expr: ^Ast_Node,
-	sym: ^Symbol,
+	declaration: ^_Declaration,
 	is_constant: bool,
 	type: ^Type,
 
 	is_typedef: bool,
-	offset_in_stack_frame: uint,
+	register: Register_Allocation,
 }
 
 Ast_Struct :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	fields: []^Ast_Var,
-	sym: ^Symbol,
+	declaration: ^_Declaration,
 	struct_type: ^Type,
 }
 
@@ -103,13 +103,13 @@ Ast_Typedef :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	other: ^Ast_Typespec,
-	sym: ^Symbol,
+	declaration: ^_Declaration,
 }
 
 Ast_Identifier :: struct {
 	using base: ^Ast_Node,
 	name: string,
-	sym: ^Symbol,
+	declaration: ^_Declaration,
 }
 
 Ast_Assign :: struct {
@@ -139,12 +139,12 @@ Ast_For_I :: struct {
 	post_stmt: ^Ast_Node,
 	block: ^Ast_Block,
 }
-Ast_For_Each :: struct {
-	using base: ^Ast_Node,
-	var: ^Ast_Var,
-	array: ^Ast_Node,
-	block: ^Ast_Block,
-}
+// Ast_For_Each :: struct {
+// 	using base: ^Ast_Node,
+// 	var: ^Ast_Var,
+// 	array: ^Ast_Node,
+// 	block: ^Ast_Block,
+// }
 Ast_While :: struct {
 	using base: ^Ast_Node,
 	condition: ^Ast_Node,
@@ -160,13 +160,14 @@ Ast_Return :: struct {
 Ast_Block :: struct {
 	using base: ^Ast_Node,
 	stmts: [dynamic]^Ast_Node,
-	symbols: [dynamic]^Symbol,
+	declarations: [dynamic]^_Declaration,
+	current_register: u64,
 }
 
 Ast_Call :: struct {
 	using base: ^Ast_Node,
 	procedure: ^Ast_Node,
-	params: []^Ast_Node,
+	args: []^Ast_Node,
 }
 
 Ast_Unary :: struct {
@@ -217,7 +218,7 @@ Ast_String :: struct {
 
 Ast_Number :: struct {
 	using base: ^Ast_Node,
-	value: union{i64, f64},
+	value: union{i64, f64, u64},
 }
 
 Ast_Null :: struct {
@@ -237,7 +238,7 @@ Ast_Node :: struct {
 		Ast_If,
 		Ast_Else_If,
 		Ast_For_I,
-		Ast_For_Each,
+		// Ast_For_Each,
 		Ast_While,
 		Ast_Return,
 		Ast_Block,
@@ -278,6 +279,7 @@ Depend_Entry :: struct {
 
 Constant_Value :: union {
 	i64,
+	u64,
 	f64,
 	bool,
 	string,

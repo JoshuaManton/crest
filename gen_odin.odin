@@ -38,8 +38,8 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 		case Type_Struct: {
 			return kind.name;
 		}
-		case Type_Dynamic_Array: {
-			return aprint("[dynamic]", type_to_odin_string(kind.array_of));
+		case Type_List: {
+			return aprint("[dynamic]", type_to_odin_string(kind.list_of));
 		}
 		case Type_Array: {
 			return aprint("[", kind.length, "]", type_to_odin_string(kind.array_of));
@@ -67,6 +67,9 @@ type_to_odin_string :: proc(canonical_type: ^Type, loc := #caller_location) -> s
 			}
 
 			return strings.to_string(str);
+		}
+		case Type_Untyped: {
+			assert(false, tprint("Shouldn't have any untyped types at this point: ", kind));
 		}
 		// @UnionTypes
 		// case Type_Union: {
@@ -99,6 +102,7 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 		#complete
 		switch const_kind in node.constant_value {
 			case i64:    sbprint(&buf, const_kind);
+			case u64:    sbprint(&buf, const_kind);
 			case TypeID: sbprint(&buf, cast(i64)const_kind);
 			case f64:    sbprint(&buf, const_kind);
 			case bool:   sbprint(&buf, const_kind);
@@ -141,15 +145,16 @@ expr_to_string :: proc(node: ^Ast_Node) -> string {
 			switch value in kind.value {
 				case f64: sbprint(&buf, value);
 				case i64: sbprint(&buf, value);
+				case u64: sbprint(&buf, value);
 			}
 		}
 
 		case Ast_Call: {
 			sbprint(&buf, expr_to_string(kind.procedure), "(");
 			comma := "";
-			for _, idx in kind.params {
-				param := kind.params[idx];
-				sbprint(&buf, comma, expr_to_string(param));
+			for _, idx in kind.args {
+				arg := kind.args[idx];
+				sbprint(&buf, comma, expr_to_string(arg));
 				comma = ", ";
 			}
 			sbprint(&buf, ")");
@@ -222,7 +227,9 @@ operator_to_odin_operator :: proc(op: Operator) -> string {
 		case .Bit_Shift_Left:                return "<<";
 		case .Bit_Shift_Right:               return ">>";
 
+		case .Caret:                         return "^";
 		case .Address:                       return "&";
+
 		case .Dereference:                   return "^";
 
 		case .Dot_Dot:                       return "..";
@@ -353,10 +360,10 @@ print_loop :: proc(output_code: ^[dynamic]u8, loop: ^Ast_Node) {
 			output(output_code, expr_to_string(kind.condition), " ");
 			print_block(output_code, kind.block);
 		}
-		case Ast_For_Each: {
-			output(output_code, kind.var.name, " in ", expr_to_string(kind.array), " ");
-			print_block(output_code, kind.block);
-		}
+		// case Ast_For_Each: {
+		// 	output(output_code, kind.var.name, " in ", expr_to_string(kind.array), " ");
+		// 	print_block(output_code, kind.block);
+		// }
 		case: {
 			logln("Unhandled for loop kind in print_loop(): ", kind^);
 		}
@@ -366,8 +373,8 @@ print_loop :: proc(output_code: ^[dynamic]u8, loop: ^Ast_Node) {
 print_call :: proc(output_code: ^[dynamic]u8, call: ^Ast_Call) {
 	output(output_code, expr_to_string(call.procedure), "(");
 	comma := "";
-	for param in call.params {
-		output(output_code, comma, expr_to_string(param));
+	for arg in call.args {
+		output(output_code, comma, expr_to_string(arg));
 		comma = ", ";
 	}
 	output(output_code, ")");

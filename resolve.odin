@@ -1,15 +1,17 @@
 package crest
 
-Symbol :: struct {
+using import "shared:workbench/logging"
+
+_Declaration :: struct {
 	name: string,
 	constant_value: Constant_Value,
+	kind: Declaration_Kind,
+}
 
-	// what kind of declaration this symbol refers to
-	decl_type: union {
-		Type_Decl,
-		Proc_Decl,
-		Var_Decl,
-	},
+Declaration_Kind :: union {
+	Type_Decl,
+	Proc_Decl,
+	Var_Decl,
 }
 
 Type_Decl :: struct { // structs and typedefs
@@ -17,9 +19,11 @@ Type_Decl :: struct { // structs and typedefs
 }
 Proc_Decl :: struct {
 	type: ^Type,
+	procedure: ^Ast_Proc,
 }
 Var_Decl :: struct {
 	type: ^Type,
+	var: ^Ast_Var,
 }
 
 resolve_identifiers :: proc(ws: ^Workspace) -> bool {
@@ -36,39 +40,42 @@ resolve_identifiers :: proc(ws: ^Workspace) -> bool {
 try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
 	block := ident.base.parent;
 	for block != nil {
-		defer block = block.base.parent;
-
-		for sym in block.symbols {
-			if ident.name == sym.name {
-				ident.sym = sym;
-				return true;
-			}
+		decl := try_find_declaration_in_block(block, ident.name);
+		if decl != nil {
+			ident.declaration = decl;
+			return true;
 		}
+		block = block.base.parent;
 	}
 	return false;
 }
 
-create_symbol :: proc(block: ^Ast_Block, name: string, type: ^Type = nil, loc := #caller_location) -> ^Symbol {
-	assert(block != nil);
-
-	symbol := new_clone(Symbol{name, nil, nil});
-	// built-in types dont have a declaration
-	if type != nil {
-		symbol.decl_type = Type_Decl{type};
-		symbol.constant_value = type.id;
+try_find_declaration_in_block :: proc(block: ^Ast_Block, name: string) -> ^_Declaration {
+	for sym in block.declarations {
+		if sym.name == name {
+			return sym;
+		}
 	}
-	append(&block.symbols, symbol);
-	return symbol;
+	return nil;
 }
 
-complete_sym :: inline proc(sym: ^Symbol, decl: $T) {
-	sym.decl_type = decl;
+create_declaration :: proc(block: ^Ast_Block, name: string, type: ^Type = nil, loc := #caller_location) -> ^_Declaration {
+	assert(block != nil);
+
+	decl := new_clone(_Declaration{name, nil, nil});
+	if type != nil {
+		decl.kind = Type_Decl{type};
+		decl.constant_value = type.id;
+	}
+	append(&block.declarations, decl);
+	return decl;
+}
+
+complete_declaration :: inline proc(decl: ^_Declaration, kind: $T) {
+	decl.kind = kind;
 }
 
 queue_identifier_for_resolving :: proc(ws: ^Workspace, ident: ^Ast_Identifier) {
-	resolved := try_resolve_identifier(ident);
-	if !resolved {
-		append(&ws.unresolved_identifiers, ident);
-	}
+	append(&ws.unresolved_identifiers, ident);
 }
 

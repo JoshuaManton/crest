@@ -23,7 +23,7 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block = nil) ->
 parse_text :: proc(ws: ^Workspace, text: string, scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
 	if scope == nil {
 		assert(ws.global_scope == nil);
-		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
+		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil, 0});
 		scope = ws.global_scope;
 	}
 
@@ -154,7 +154,7 @@ is_unary_op :: proc() -> bool {
 	token := peek();
 	if token.kind != .Operator do return false;
 	switch token.operator {
-		case .Plus, .Minus, .Bit_Xor, .Bit_And, .Ampersand, .Boolean_Not: {
+		case .Plus, .Minus, .Ampersand, .Caret, .Boolean_Not: {
 			return true;
 		}
 	}
@@ -201,10 +201,10 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 	token := peek();
 	if token.kind == Ident {
 		token = next_token();
-		symbol := node(ws, token, Ast_Identifier{{}, token.text, nil});
-		queue_identifier_for_resolving(ws, symbol);
-		ident_typespec := node(ws, token, Ast_Typespec{{}, nil, Typespec_Identifier{symbol}});
-		depend(ws, ident_typespec, symbol);
+		ident := node(ws, token, Ast_Identifier{{}, token.text, nil});
+		queue_identifier_for_resolving(ws, ident);
+		ident_typespec := node(ws, token, Ast_Typespec{{}, nil, Typespec_Identifier{ident}});
+		depend(ws, ident_typespec, ident);
 		return ident_typespec;
 	}
 
@@ -250,7 +250,7 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 			next_token();
 			expect(Right_Square);
 			typespec := parse_typespec(ws);
-			dynamic_array := node(ws, token, Ast_Typespec{{}, nil, Typespec_Dynamic_Array{typespec}});
+			dynamic_array := node(ws, token, Ast_Typespec{{}, nil, Typespec_List{typespec}});
 			depend(ws, dynamic_array, typespec);
 			return dynamic_array;
 		}
@@ -387,23 +387,22 @@ parse_base_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 }
 
 parse_unary_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
-	using Token_Type;
-
+	expr: ^Ast_Node;
 	if is_unary_op() {
 		op_token := next_token();
+		if op_token.operator == .Ampersand do op_token.operator = .Address;
+
 		rhs := parse_unary_expr(ws);
-		op := op_token.operator;
-		if op == .Ampersand do op = .Address;
-		node := node(ws, op_token, Ast_Unary{{}, op, rhs});
+		node := node(ws, op_token, Ast_Unary{{}, op_token.operator, rhs});
 		depend(ws, node, rhs);
 		return node.base;
 	}
-	else if is_token(Cast) {
+	else if is_token(.Cast) {
 		cast_keyword := next_token();
-		expect(Left_Paren);
+		expect(.Left_Paren);
 		target_type := parse_typespec(ws);
-		expect(Right_Paren);
-		rhs := parse_expr(ws);
+		expect(.Right_Paren);
+		rhs := parse_unary_expr(ws);
 		node := node(ws, cast_keyword, Ast_Cast{{}, target_type, rhs});
 		depend(ws, node, rhs);
 		depend(ws, node, target_type);
@@ -414,17 +413,15 @@ parse_unary_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
 }
 
 parse_mul_expr :: proc(ws: ^Workspace) -> ^Ast_Node {
-	using Token_Type;
-
 	token := peek();
 	current_expr := parse_unary_expr(ws);
 	for is_mul_op() {
 		op_token := next_token();
+		if op_token.operator == .Ampersand do op_token.operator = .Bit_And;
+
 		rhs := parse_unary_expr(ws);
 		lhs := current_expr;
-		op := op_token.operator;
-		if op == .Ampersand do op = .Bit_And;
-		current_expr = node(ws, token, Ast_Binary{{}, op, current_expr, rhs}).base;
+		current_expr = node(ws, token, Ast_Binary{{}, op_token.operator, current_expr, rhs}).base;
 		depend(ws, current_expr, rhs);
 		depend(ws, current_expr, lhs);
 	}
@@ -522,13 +519,13 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 
 	name := name_token.text;
 
-	decl := create_symbol(ws.current_scope, name, nil);
+	decl := create_declaration(ws.current_scope, name, nil);
 
 	typespec: ^Ast_Typespec;
 	value: ^Ast_Node;
 
 	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false, 0});
+		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false, {}});
 	}
 
 	if is_token(Colon) {
@@ -548,7 +545,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false, 0});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false, {}});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -637,14 +634,14 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 		expect(Semicolon);
 	}
 
-	decl := create_symbol(ws.current_scope, name, nil);
+	decl := create_declaration(ws.current_scope, name, nil);
 
 	procedure_stmt.name = name;
 	procedure_stmt.params = params[:];
 	procedure_stmt.return_typespec = return_type;
 	procedure_stmt.flags = flags;
 	procedure_stmt.block = block;
-	procedure_stmt.sym = decl;
+	procedure_stmt.declaration = decl;
 
 	if currently_parsing_procedure.parent == ws.global_scope {
 		procedure_stmt.output_name = name;
@@ -670,7 +667,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Node {
 	struct_token := expect(Token_Type.Type_Keyword);
 	name_token := expect(Token_Type.Ident);
-	decl := create_symbol(ws.current_scope, name_token.text, nil);
+	decl := create_declaration(ws.current_scope, name_token.text, nil);
 
 	n: ^Ast_Node;
 
@@ -722,6 +719,7 @@ parse_if_stmt :: proc(ws: ^Workspace) -> ^Ast_If {
 			assert(if_stmt.else_block == nil);
 			block := parse_block(ws);
 			if_stmt.else_block = block;
+			break;
 		}
 	}
 
@@ -735,7 +733,9 @@ parse_if_stmt :: proc(ws: ^Workspace) -> ^Ast_If {
 		depend(ws, if_stmt, ie);
 	}
 
-	depend(ws, if_stmt, if_stmt.else_block);
+	if if_stmt.else_block != nil {
+		depend(ws, if_stmt, if_stmt.else_block);
+	}
 
 	return if_stmt;
 }
@@ -817,7 +817,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			var := parse_var_decl(ws);
 			expect(Semicolon);
 			if currently_parsing_procedure != nil {
-				append(&currently_parsing_procedure.vars, var);
+				append(&currently_parsing_procedure.variables, var);
 			}
 			return var.base;
 		}
@@ -919,7 +919,7 @@ parse_block :: proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Block {
 
 	curly := expect(Left_Curly);
 
-	new_scope := node(ws, curly, Ast_Block{{}, nil, nil});
+	new_scope := node(ws, curly, Ast_Block{{}, nil, nil, 0});
 	old_current_block := ws.current_scope;
 	ws.current_scope = new_scope;
 	defer ws.current_scope = old_current_block;

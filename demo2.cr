@@ -1,7 +1,10 @@
 // #include "print.cr"
 
 proc main() {
-	var x: int;
-	x = -2;
-	var y = x + 5;
+	foo();
+}
+
+proc foo() {
+	// var x: int = 4;
+	// var z: int = x + 2;
 }

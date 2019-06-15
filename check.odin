@@ -10,7 +10,6 @@ using import "shared:workbench/logging"
 // todo(josh): these are goofy
 INT_SIZE :: 4;
 POINTER_SIZE :: 8;
-DYNAMIC_ARRAY_SIZE :: POINTER_SIZE + INT_SIZE + INT_SIZE;
 SLICE_SIZE :: POINTER_SIZE + INT_SIZE;
 
 type_i8:    ^Type;
@@ -32,41 +31,58 @@ type_float: ^Type;
 type_bool: ^Type;
 
 type_string: ^Type;
-// type_dynamic_array: ^Type;
+type_rawptr: ^Type;
+// type_list: ^Type;
 // type_slice: ^Type;
+
+type_untyped_int: ^Type;
+type_untyped_float: ^Type;
 
 type_type_id: ^Type;
 
-// todo(josh): untyped numbers
-// type_untyped_int:   ^Type;
-// type_untyped_float: ^Type;
-
 init_builtin_types :: proc(using ws: ^Workspace) {
 	if type_i8 == nil {
-		type_i8  = make_type(ws, 1, Type_Primitive{"i8"});  create_symbol(ws.global_scope, "i8",    type_i8);
-		type_i16 = make_type(ws, 2, Type_Primitive{"i16"}); create_symbol(ws.global_scope, "i16",   type_i16);
-		type_i32 = make_type(ws, 4, Type_Primitive{"i32"}); create_symbol(ws.global_scope, "i32",   type_i32);
-		type_i64 = make_type(ws, 8, Type_Primitive{"i64"}); create_symbol(ws.global_scope, "i64",   type_i64);
-		type_int = type_i32; create_symbol(ws.global_scope, "int", type_i32);
+		type_i8   = make_type(ws, 1, Type_Primitive{"i8"},   Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i16  = make_type(ws, 2, Type_Primitive{"i16"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i32  = make_type(ws, 4, Type_Primitive{"i32"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i64  = make_type(ws, 8, Type_Primitive{"i64"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_u8   = make_type(ws, 1, Type_Primitive{"u8"},   Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u16  = make_type(ws, 2, Type_Primitive{"u16"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u32  = make_type(ws, 4, Type_Primitive{"u32"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u64  = make_type(ws, 8, Type_Primitive{"u64"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_f32  = make_type(ws, 4, Type_Primitive{"f32"},  Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+		type_f64  = make_type(ws, 8, Type_Primitive{"f64"},  Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+		type_bool = make_type(ws, 1, Type_Primitive{"bool"}, {});
 
-		type_u8   = make_type(ws, 1, Type_Primitive{"u8"});   create_symbol(ws.global_scope, "u8",    type_u8);
-		type_u16  = make_type(ws, 2, Type_Primitive{"u16"});  create_symbol(ws.global_scope, "u16",   type_u16);
-		type_u32  = make_type(ws, 4, Type_Primitive{"u32"});  create_symbol(ws.global_scope, "u32",   type_u32);
-		type_u64  = make_type(ws, 8, Type_Primitive{"u64"});  create_symbol(ws.global_scope, "u64",   type_u64);
-		type_uint = type_u32; create_symbol(ws.global_scope, "uint",  type_u32);
+		type_int   = type_i32;
+		type_uint  = type_u32;
+		type_float = type_f32;
 
-		type_f32   = make_type(ws, 4, Type_Primitive{"f32"});   create_symbol(ws.global_scope, "f32",   type_f32);
-		type_f64   = make_type(ws, 8, Type_Primitive{"f64"});   create_symbol(ws.global_scope, "f64",   type_f64);
-		type_float = type_f32; create_symbol(ws.global_scope, "float", type_f32);
+		type_rawptr = make_type(ws, POINTER_SIZE, Type_Primitive{"rawptr"}, Type_Flags.Pointer);
 
-		type_bool = make_type(ws, 1, Type_Primitive{"bool"}); create_symbol(ws.global_scope, "bool",   type_bool);
+		create_declaration(ws.global_scope, "i8",      type_i8);
+		create_declaration(ws.global_scope, "i16",     type_i16);
+		create_declaration(ws.global_scope, "i32",     type_i32);
+		create_declaration(ws.global_scope, "i64",     type_i64);
+		create_declaration(ws.global_scope, "int",     type_i32);
+		create_declaration(ws.global_scope, "u8",      type_u8);
+		create_declaration(ws.global_scope, "u16",     type_u16);
+		create_declaration(ws.global_scope, "u32",     type_u32);
+		create_declaration(ws.global_scope, "u64",     type_u64);
+		create_declaration(ws.global_scope, "uint",    type_u32);
+		create_declaration(ws.global_scope, "f32",     type_f32);
+		create_declaration(ws.global_scope, "f64",     type_f64);
+		create_declaration(ws.global_scope, "float",   type_f32);
+		create_declaration(ws.global_scope, "bool",    type_bool);
+		create_declaration(ws.global_scope, "rawptr",  type_rawptr);
 
-		string_fields := [?]Field{
+
+
+		string_fields := [?]Field {
 			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
 			{"length", type_int},
 		};
-		type_string = make_type_struct(ws, "string", string_fields[:]); create_symbol(ws.global_scope, "string", type_string);
-
+		type_string = make_type_struct(ws, "string", string_fields[:]); create_declaration(ws.global_scope, "string", type_string);
 
 		// slice_fields := [?]Field{
 		// 	{"data",   get_or_make_type_ptr_to(ws, type_u8)},
@@ -80,16 +96,14 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		// };
 		// type_dynamic_array = make_type_struct(ws, "dynamic array", dynamic_array_fields[:]);
 
-		type_type_id = make_type_distinct(ws, "type_id", type_int); create_symbol(ws.global_scope, "type_id", type_type_id);
+		// todo:(josh): currently operators are preserved when making a distinct type, so adding two type_ids together will not error as it should
+		type_type_id = make_type(ws, INT_SIZE, Type_Primitive{"type_id"}, {}); create_declaration(ws.global_scope, "type_id", type_type_id);
 
-		// todo(josh): untyped numbers
-		// type_untyped_int   = make_type(ws, 0, Type_Primitive{"untyped_int"  });
-		// type_untyped_float = make_type(ws, 0, Type_Primitive{"untyped_float"});
-
-
+		type_untyped_int   = make_type(ws, 0, Type_Untyped{"untyped_int"  }, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer);
+		type_untyped_float = make_type(ws, 0, Type_Untyped{"untyped_float"}, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Float);
 
 
-		// ints
+
 		for t in ([?]^Type{type_i8, type_i16, type_i32, type_i64}) {
 			add_equality_operators(t, i64);
 			add_less_and_greater_than_operators(t, i64);
@@ -108,6 +122,7 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 			add_less_and_greater_than_operators(t, f64);
 			add_math_operators(t, f64);
 		}
+
 		// string
 		add_equality_operators(type_string, string);
 		type_add_operator(type_string, .Plus, type_string, proc(a, b: Constant_Value) -> Constant_Value { return aprint(a.(string), b.(string)); }, true);
@@ -229,11 +244,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			#complete
 			switch value in kind.value {
 				case f64: {
-					t = type_float;
+					t = type_untyped_float;
 					node.constant_value = value;
 				}
 				case i64: {
-					t = type_int;
+					t = type_untyped_int;
+					node.constant_value = value;
+				}
+				case u64: {
+					t = type_untyped_int;
 					node.constant_value = value;
 				}
 			}
@@ -256,7 +275,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			switch kind.op {
 				case .Boolean_Not: {
 					if rhs_type != type_bool {
-						error(node, "Unary operator `!` is not valid for type ", type_to_string(rhs_type));
+						error(node, "Unary operator `!` is only valid for type `bool`. Given: ", type_to_string(rhs_type));
 						return .Error;
 					}
 					if kind.rhs.constant_value != nil {
@@ -264,11 +283,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					}
 				}
 				case .Plus: {
-					// all good
+					if !is_numeric_type(rhs_type) {
+						error(node, "Unary operator `+` is only valid for numeric types. Given: ", type_to_string(rhs_type));
+						return .Error;
+					}
+					// unary `+` doesn't actually do anything
 				}
 				case .Minus: {
 					if !is_numeric_type(rhs_type) {
-						error(node, "Unary operator `-` is not valid for type ", type_to_string(rhs_type));
+						error(node, "Unary operator `-` is only valid for numeric types. Given: ", type_to_string(rhs_type));
 						return .Error;
 					}
 
@@ -288,10 +311,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					}
 					result_type = ptr.ptr_to;
 				}
-				case .Ampersand: assert(false, "Ampersand should have gotten converted to Address by now");
 				case .Address: { // take address
 					result_type = get_or_make_type_ptr_to(ws, rhs_type);
 				}
+				case .Ampersand: assert(false, "Ampersand should have gotten converted to Address by now");
 				case: {
 					logln(site(node.root_token.site));
 					unhandledcase(kind.op);
@@ -306,10 +329,16 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			ltype := kind.lhs.expr_type;
 			rtype := kind.rhs.expr_type;
 
-			if !types_match(ltype, rtype) && !types_match(rtype, ltype) {
+			if !is_assignable_to(rtype, ltype) {
 				type_mismatch(ltype, kind.rhs);
 				return .Error;
 			}
+
+			// result_type := get_result_type(ltype, rtype);
+			// if result_type == nil {
+			// 	type_mismatch(ltype, kind.rhs, node);
+			// 	return .Error;
+			// }
 
 			operator_info, ok := type_get_operator(ltype, kind.op);
 			if !ok {
@@ -330,9 +359,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				}
 			}
 
-			t: ^Type = operator_info.result_type;
-			assert(t != nil);
-			complete_expr(node, t);
+			complete_expr(node, operator_info.result_type);
 			return .Ok;
 		}
 
@@ -357,9 +384,13 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Subscript: {
 			assert(kind.left.expr_type != nil);
-			left := kind.left.expr_type;
+			assert(kind.index.expr_type != nil);
+			if !is_assignable_to(kind.index.expr_type, type_int) {
+				type_mismatch(type_int, kind.index);
+				return .Error;
+			}
 
-			if !ensure_types_match(type_int, kind.index) do return .Error;
+			left := kind.left.expr_type;
 			t := (&left.kind.(Type_Array)).array_of;
 			complete_expr(node, t);
 			return .Ok;
@@ -373,34 +404,33 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Identifier: {
+			assert(kind.declaration != nil);
 			// Symbols aren't AST nodes, so the Ast_Identifier can't depend() on it like normal. Oh well.
-			sym := kind.sym;
-			assert(sym != nil);
-			if sym.decl_type == nil {
+			if kind.declaration.kind == nil {
 				return Check_Result.Not_Checked;
 			}
 
 			#complete
-			switch sym_type in sym.decl_type {
+			switch decl_type in kind.declaration.kind {
 				case Type_Decl: {
-					assert(sym_type.type.id != 0);
+					assert(decl_type.type.id != 0);
 					complete_expr(node, type_type_id);
 				}
 				case Proc_Decl: {
-					assert(sym_type.type != nil);
-					complete_expr(node, sym_type.type);
+					assert(decl_type.type != nil);
+					complete_expr(node, decl_type.type);
 				}
 				case Var_Decl: {
-					assert(sym_type.type != nil);
-					complete_expr(node, sym_type.type);
+					assert(decl_type.type != nil);
+					complete_expr(node, decl_type.type);
 				}
 				case: {
-					unhandledcase(sym_type);
+					unhandledcase(decl_type);
 				}
 			}
 
-			if sym.constant_value != nil {
-				node.constant_value = sym.constant_value;
+			if kind.constant_value != nil {
+				node.constant_value = kind.constant_value;
 			}
 			return .Ok;
 		}
@@ -448,7 +478,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			true_type: ^Type;
 			if declared_type != nil && expr_type != nil {
-				if !ensure_types_match(declared_type, kind.expr) do return .Error;
+				// they specified a type _and_ have an expression, so make sure the types match
+				if !is_assignable_to(expr_type, declared_type) {
+					type_mismatch(declared_type, kind.expr);
+					return .Error;
+				}
 				true_type = declared_type;
 			}
 
@@ -459,7 +493,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				true_type = expr_type;
 			}
 			else {
-				error(node, "Either a type or value is required for a variable declaraion.");
+				error(node, "Either a type or value is required for a variable declaration.");
 				return .Error;
 			}
 
@@ -474,10 +508,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			if kind.is_constant && true_type == type_type_id {
 				assert(kind.expr != nil);
 				node.do_not_print = true; // don't print type aliases
-				complete_sym(kind.sym, Type_Decl{get_type(ws, kind.expr.constant_value.(TypeID))});
+				complete_declaration(kind.declaration, Type_Decl{get_type(ws, kind.expr.constant_value.(TypeID))});
 			}
 			else {
-				complete_sym(kind.sym, Var_Decl{true_type});
+				complete_declaration(kind.declaration, Var_Decl{true_type, kind});
 			}
 
 			if kind.is_constant {
@@ -487,7 +521,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					return .Error;
 				}
 				node.constant_value = kind.expr.constant_value;
-				kind.sym.constant_value = node.constant_value;
+				kind.declaration.constant_value = node.constant_value;
 			}
 
 			complete_node(node);
@@ -507,7 +541,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			t := get_or_make_type_proc(ws, kind);
 			kind.signature_type = t;
 			complete_node(node);
-			complete_sym(kind.sym, Proc_Decl{t});
+			complete_declaration(kind.declaration, Proc_Decl{t, kind});
 			return .Ok;
 		}
 
@@ -518,16 +552,16 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 			t := make_type_struct(ws, kind.name, fields[:]);
 			complete_node(node);
-			complete_sym(kind.sym, Type_Decl{t});
-			kind.sym.constant_value = t.id;
+			complete_declaration(kind.declaration, Type_Decl{t});
+			kind.declaration.constant_value = t.id;
 			return .Ok;
 		}
 
 		case Ast_Typedef: {
 			t := make_type_distinct(ws, kind.name, get_type(ws, kind.other.base.constant_value.(TypeID)));
 			complete_node(node);
-			complete_sym(kind.sym, Type_Decl{t});
-			kind.sym.constant_value = t.id;
+			complete_declaration(kind.declaration, Type_Decl{t});
+			kind.declaration.constant_value = t.id;
 			return .Ok;
 		}
 
@@ -536,13 +570,17 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			proc_type, ok := target_type.kind.(Type_Proc);
 			assert(ok);
 
-			if len(kind.params) != len(proc_type.params) {
-				error(node, "Expected ", len(proc_type.params), " parameters, got ", len(kind.params));
+			if len(kind.args) != len(proc_type.params) {
+				error(node, "Expected ", len(proc_type.params), " parameters, got ", len(kind.args));
 			}
 
-			for _, idx in kind.params {
-				param := kind.params[idx];
-				ensure_types_match(proc_type.params[idx].inferred_type, param);
+			for _, idx in kind.args {
+				arg := kind.args[idx];
+				param := proc_type.params[idx];
+				if !is_assignable_to(arg.expr_type, param.inferred_type) {
+					type_mismatch(param.inferred_type, arg);
+					return .Error;
+				}
 			}
 
 			complete_expr(node, proc_type.return_type, true);
@@ -564,7 +602,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// 	else {
 		// 		assert(kind.min.expr_type != nil);
 		// 		min_type = kind.min.expr_type;
-		// 		ensure_types_match(type_int, kind.min);
+		// 		ensure_types_match(type_int, kind.min, node);
 		// 	}
 
 		// 	if kind.max == nil {
@@ -573,7 +611,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// 	else {
 		// 		assert(kind.max.expr_type != nil);
 		// 		max_type = kind.max.expr_type;
-		// 		ensure_types_match(type_int, kind.max);
+		// 		ensure_types_match(type_int, kind.max, node);
 		// 	}
 
 		// 	t: ^Type;
@@ -596,7 +634,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		// 		case Type_Array: {
 		// 			array_of = array_kind.array_of;
 		// 		}
-		// 		case Type_Dynamic_Array: {
+		// 		case Type_List: {
 		// 			array_of = array_kind.array_of;
 		// 		}
 		// 		case Type_Slice: {
@@ -632,43 +670,70 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_If: {
-			ensure_types_match(type_bool, kind.condition);
+			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+				type_mismatch(type_bool, kind.condition);
+				return .Error;
+			}
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Else_If: {
-			ensure_types_match(type_bool, kind.condition);
+			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+				type_mismatch(type_bool, kind.condition);
+				return .Error;
+			}
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_While: {
-			ensure_types_match(type_bool, kind.condition);
+			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+				type_mismatch(type_bool, kind.condition);
+				return .Error;
+			}
 			complete_node(node);
 			return .Ok;
 		}
 
-		case Ast_For_Each: {
-			assert(kind.array.expr_type != nil);
-			assert(kind.var.base.check_state == .Checked);
-			t := get_base_type(kind.array.expr_type);
-			ensure_types_match(t, kind.var.base);
-			complete_node(node);
-			return .Ok;
-		}
+		// case Ast_For_Each: {
+		// 	assert(kind.array.expr_type != nil);
+		// 	assert(kind.var.base.check_state == .Checked);
+
+		// 	array_expr_type := kind.array.expr_type;
+		// 	if !is_slice_type(array_expr_type) && !is_array_type(array_expr_type) && !is_list_type(array_expr_type) {
+		// 		error(kind.array, "Cannot iterate over type: ", type_to_string(array_expr_type));
+		// 		return .Error;
+		// 	}
+
+		// 	array_of := get_base_type(kind.array.expr_type);
+		// 	if array_of !=
+		// 	if is_assignable_to()
+		// 	ensure_types_match(t, kind.var.base, kind.var.base);
+		// 	complete_node(node);
+		// 	return .Ok;
+		// }
 
 		case Ast_Assign: {
 			assert(kind.left.expr_type != nil);
-			left := kind.left.expr_type;
-			ensure_types_match(left, kind.right);
+			assert(kind.right.expr_type != nil);
+
+			if !is_assignable_to(kind.right.expr_type, kind.left.expr_type) {
+				type_mismatch(kind.left.expr_type, kind.right);
+				return .Error;
+			}
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Return: {
 			assert(kind.procedure.signature_type != nil);
-			ensure_types_match(kind.procedure.signature_type.kind.(Type_Proc).return_type, kind.expr);
+			return_type := kind.procedure.signature_type.kind.(Type_Proc).return_type;
+			expr_type := kind.expr.expr_type;
+			if !is_assignable_to(expr_type, return_type) {
+				type_mismatch(return_type, kind.expr);
+				return .Error;
+			}
 			complete_node(node);
 			return .Ok;
 		}
@@ -683,8 +748,9 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			#complete
 			switch typespec_kind in kind.kind {
 				case Typespec_Identifier: {
-					switch decl_type in typespec_kind.ident.sym.decl_type {
+					switch decl_type in typespec_kind.ident.declaration.kind {
 						case Type_Decl: {
+							assert(decl_type.type != nil);
 							complete_typespec(kind, decl_type.type);
 							return .Ok;
 						}
@@ -694,25 +760,26 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						}
 					}
 				}
-				case Typespec_Dynamic_Array: {
-					array_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
-					t := get_or_make_type_dynamic_array_of(ws, array_of);
+
+				case Typespec_List: {
+					list_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
+					t := get_or_make_type_list_of(ws, list_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Array: {
-					if typespec_kind.size_expr.constant_value == nil {
-						error(typespec_kind.size_expr, "Array sizes require a constant integer value.");
+					if typespec_kind.length_expr.constant_value == nil {
+						error(typespec_kind.length_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
-					array_size, ok := typespec_kind.size_expr.constant_value.(i64);
+					array_length, ok := typespec_kind.length_expr.constant_value.(i64);
 					if !ok {
-						error(typespec_kind.size_expr, "Array sizes require a constant integer value.");
+						error(typespec_kind.length_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
 					array_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
-					t := get_or_make_type_array_of(ws, cast(uint)array_size, array_of);
+					t := get_or_make_type_array_of(ws, cast(uint)array_length, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
@@ -798,25 +865,50 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 
 
-ensure_types_match :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) -> bool {
-	if !types_match(wanted, given.expr_type, loc) {
-		type_mismatch(wanted, given, loc);
-		return false;
-	}
-	return true;
-}
+// get_result_type :: proc(lhs: ^Type, rhs: ^Type) -> ^Type {
+// 	if lhs == nil && rhs != nil do return nil;
+// 	if lhs != nil && rhs == nil do return nil;
+
+// 	if lhs == rhs do return lhs;
+
+// 	if is_untyped_type(lhs) do return rhs;
+
+// 	return lhs;
+// }
 
 type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) {
 	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.expr_type));
 }
 
-types_match :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location) -> bool {
+// ensure_types_match :: proc(wanted: ^Type, given: ^Ast_Node, error_node: ^Ast_Node, loc := #caller_location) -> bool {
+// 	if !types_match(wanted, given.expr_type, loc) {
+// 		type_mismatch(wanted, given, error_node, loc);
+// 		return false;
+// 	}
+// 	return true;
+// }
+
+is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location) -> bool {
 	//
-	if wanted == nil && given != nil do return false;
-	if wanted != nil && given == nil do return false;
+	if lhs == nil && rhs != nil do return false;
+	if lhs != nil && rhs == nil do return false;
 
 	//
-	if wanted == given do return true;
+	if lhs == rhs do return true;
+
+	if is_untyped_type(rhs) {
+		if is_integer_type(rhs) && is_integer_type(lhs) {
+			return true;
+		}
+		if is_float_type(rhs)   && is_float_type(lhs) {
+			return true;
+		}
+
+		// any number can be assigned to floats
+		if is_numeric_type(rhs) && is_float_type(lhs) {
+			return true;
+		}
+	}
 
 	// todo(josh): untyped_numbers
 	//
@@ -841,19 +933,50 @@ types_match :: inline proc(wanted: ^Type, given: ^Type, loc := #caller_location)
 
 
 is_numeric_type :: proc(t: ^Type) -> bool {
-	switch t {
-	case type_i8,  type_i16, type_i32, type_i64,
-	     type_u8,  type_u16, type_u32, type_u64,
-	     type_f32, type_f64: {
-	     	return true;
-	     }
+	if t.flags & cast(u32)Type_Flags.Number > 0 {
+		return true;
+	}
+	return false;
+}
+
+is_integer_type :: proc(t: ^Type) -> bool {
+	if t.flags & cast(u32)Type_Flags.Integer > 0 {
+		return true;
+	}
+	return false;
+}
+
+is_float_type :: proc(t: ^Type) -> bool {
+	if t.flags & cast(u32)Type_Flags.Float > 0 {
+		return true;
+	}
+	return false;
+}
+
+is_signed_type :: proc(t: ^Type) -> bool {
+	if t.flags & cast(u32)Type_Flags.Signed > 0 {
+		return true;
+	}
+	return false;
+}
+
+is_unsigned_type :: proc(t: ^Type) -> bool {
+	if t.flags & cast(u32)Type_Flags.Unsigned > 0 {
+		return true;
+	}
+	return false;
+}
+
+is_untyped_type :: proc(t: ^Type) -> bool {
+	if t.flags & cast(u32)Type_Flags.Untyped > 0 {
+		return true;
 	}
 	return false;
 }
 
 is_pointer_type :: proc(t: ^Type) -> bool {
-	switch kind in t.kind {
-		case Type_Ptr: return true;
+	if t.flags & cast(u32)Type_Flags.Pointer > 0 {
+		return true;
 	}
 	return false;
 }
@@ -864,17 +987,39 @@ is_array_type :: proc(t: ^Type) -> bool {
 	}
 	return false;
 }
+is_slice_type :: proc(t: ^Type) -> bool {
+	switch kind in t.kind {
+		case Type_Slice: return true;
+	}
+	return false;
+}
+is_list_type :: proc(t: ^Type) -> bool {
+	switch kind in t.kind {
+		case Type_List: return true;
+	}
+	return false;
+}
+
 
 
 
 // note(josh): need some kind of system for this, 8 is just what the VM's alignment is so we'll use that for now
 TARGET_PLATFORM_ALIGNMENT :: 8;
 
-make_type :: proc(ws: ^Workspace, size: uint, derived: $T, loc := #caller_location) -> ^Type {
+make_type :: proc(ws: ^Workspace, size: uint, derived: $T, flags: Type_Flags, aligned_size_override : uint = 0, loc := #caller_location) -> ^Type {
 	new_type := new(Type);
 	new_type.id = cast(TypeID)len(ws.all_types)+1;
 	new_type.packed_size = size;
+	if aligned_size_override == 0 {
+		new_type.aligned_size = align_forward(size, TARGET_PLATFORM_ALIGNMENT);
+	}
+	else {
+		new_type.aligned_size = aligned_size_override;
+	}
+	assert(new_type.aligned_size % TARGET_PLATFORM_ALIGNMENT == 0);
+	new_type.register_size = cast(u64)new_type.aligned_size / TARGET_PLATFORM_ALIGNMENT;
 	new_type.kind = derived;
+	new_type.flags = cast(u32)flags;
 	append(&ws.all_types, new_type);
 	return new_type;
 }
@@ -894,38 +1039,22 @@ get_type :: proc(ws: ^Workspace, id: TypeID) -> ^Type {
 
 make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type {
 	assert(t != nil);
-	tval := t^;
-	new_t := new_clone(tval);
-	// todo(josh): this is pretty janky
-	switch type_kind in &new_t.kind {
-	case Type_Primitive: {
-		kind := type_kind^;
-		kind.name = new_name;
-		return make_type(ws, new_t.packed_size, kind);
-	}
-	case Type_Struct: {
-		kind := type_kind^;
-		kind.name = new_name;
-		return make_type(ws, new_t.packed_size, kind);
-	}
-	case: {
-		return make_type(ws, new_t.packed_size, new_t.kind);
-	}
-	}
-	unreachable();
-	return {};
-
+	new_t := new_clone(t^);
+	new_t.id = cast(TypeID)len(ws.all_types)+1;
+	return new_t;
 }
 
 make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type {
 	size : uint = 0;
+	aligned_size : uint = 0;
 	for var in fields {
 		assert(var.inferred_type != nil);
 		size += var.inferred_type.packed_size;
+		aligned_size += var.inferred_type.aligned_size;
 	}
 
 	assert(size != 0);
-	new_type := make_type(ws, size, Type_Struct{name, fields});
+	new_type := make_type(ws, size, Type_Struct{name, fields}, {}, aligned_size);
 	return new_type;
 }
 
@@ -968,14 +1097,14 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 		append(&params, Field{param.name, t});
 	}
 
-	new_type := make_type(ws, POINTER_SIZE, Type_Proc{params[:], declaration.return_type});
+	new_type := make_type(ws, POINTER_SIZE, Type_Proc{params[:], declaration.return_type}, Type_Flags.Procedure);
 	return new_type;
 }
 
 get_base_type :: proc(type: ^Type) -> ^Type {
 	switch kind in type.kind {
-		case Type_Dynamic_Array: {
-			return kind.array_of;
+		case Type_List: {
+			return kind.list_of;
 		}
 		case Type_Array: {
 			return kind.array_of;
@@ -1006,23 +1135,8 @@ get_or_make_type_ptr_to :: proc(using ws: ^Workspace, ptr_to: ^Type) -> ^Type {
 		}
 	}
 
-	type_ptr := make_type(ws, POINTER_SIZE, Type_Ptr{ptr_to});
+	type_ptr := make_type(ws, POINTER_SIZE, Type_Ptr{ptr_to}, Type_Flags.Pointer);
 	return type_ptr;
-}
-
-get_or_make_type_dynamic_array_of :: proc(using ws: ^Workspace, array_of: ^Type) -> ^Type {
-	if all_types != nil {
-		for other_type in all_types {
-			if other_array, ok := other_type.kind.(Type_Dynamic_Array); ok {
-				if array_of == other_array.array_of {
-					return other_type;
-				}
-			}
-		}
-	}
-
-	array_type := make_type(ws, DYNAMIC_ARRAY_SIZE, Type_Dynamic_Array{array_of});
-	return array_type;
 }
 
 get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: ^Type) -> ^Type {
@@ -1039,7 +1153,22 @@ get_or_make_type_array_of :: proc(using ws: ^Workspace, length: uint, array_of: 
 		}
 	}
 
-	array_type := make_type(ws, length, Type_Array{length, array_of});
+	array_type := make_type(ws, array_of.aligned_size * length, Type_Array{length, array_of}, {});
+	return array_type;
+}
+
+get_or_make_type_list_of :: proc(using ws: ^Workspace, list_of: ^Type) -> ^Type {
+	if all_types != nil {
+		for other_type in all_types {
+			if other_list, ok := other_type.kind.(Type_List); ok {
+				if list_of == other_list.list_of {
+					return other_type;
+				}
+			}
+		}
+	}
+
+	array_type := make_type(ws, POINTER_SIZE + INT_SIZE, Type_List{list_of}, {}); // ptr + length
 	return array_type;
 }
 
@@ -1054,7 +1183,7 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 		}
 	}
 
-	type_slice := make_type(ws, SLICE_SIZE, Type_Slice{slice_of});
+	type_slice := make_type(ws, SLICE_SIZE, Type_Slice{slice_of}, {});
 	return type_slice;
 }
 
@@ -1115,8 +1244,8 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 		case Type_Struct: {
 			return kind.name;
 		}
-		case Type_Dynamic_Array: {
-			return aprint("[:]", type_to_string(kind.array_of));
+		case Type_List: {
+			return aprint("[:]", type_to_string(kind.list_of));
 		}
 		case Type_Array: {
 			return aprint("[", kind.length, "]", type_to_string(kind.array_of));
@@ -1141,6 +1270,9 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 				sbprint(&buf, " ", type_to_string(kind.return_type));
 			}
 			return strings.to_string(buf);
+		}
+		case Type_Untyped: {
+			return kind.name;
 		}
 
 		// @UnionTypes

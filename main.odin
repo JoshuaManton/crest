@@ -3,6 +3,7 @@ package crest
 using import "core:fmt"
 	  import "core:os"
 
+using import "../storm"
 using import "shared:workbench/logging"
 
 main :: proc() {
@@ -35,6 +36,8 @@ Workspace :: struct {
 	all_types: [dynamic]^Type,
 	all_procedures: [dynamic]^Ast_Proc,
 	all_global_variables: [dynamic]^Ast_Var,
+
+	vm: VM,
 
 	// ir_procedures: [dynamic]^IR_Procedure,
 	// ir_global_fields: [dynamic]^IR_Field,
