@@ -497,9 +497,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				return .Error;
 			}
 
-			// todo(josh): untyped numbers
-			// if true_type == type_untyped_int   do true_type = type_int;
-			// if true_type == type_untyped_float do true_type = type_float;
+			if is_untyped_type(true_type) {
+				if      true_type == type_untyped_int   do true_type = type_int;
+				else if true_type == type_untyped_float do true_type = type_float;
+				else do assert(false, tprint("Unhandled untyped type: ", true_type.kind));
+			}
+				
 
 			assert(true_type != nil);
 

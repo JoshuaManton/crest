@@ -6,4 +6,4 @@ IF "%2" == "-build-compiler" (
 
 crest.exe %1
 
-odin run output
+rem odin run output

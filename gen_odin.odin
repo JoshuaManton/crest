@@ -1,5 +1,6 @@
 package crest
 
+when false {
 using import "core:fmt"
 	  import "core:os"
 	  import "core:strings"
@@ -497,4 +498,5 @@ type_id :: distinct int;
 	os.write_entire_file("output/output.odin", cast([]u8)output_code);
 
 	return output_code;
+}
 }
