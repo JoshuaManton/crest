@@ -28,7 +28,7 @@ Token_Type :: enum {
 	Break,
 	Continue,
 	Enum,
-	Type_Keyword,
+	Struct_Keyword,
 	Union,
 	Const,
 	Sizeof,
@@ -559,7 +559,7 @@ next_token :: proc(loc := #caller_location) -> Token {
 					case "break":       { token_type = .Break; }
 					case "continue":    { token_type = .Continue; }
 					case "enum":        { token_type = .Enum; }
-					case "type":        { token_type = .Type_Keyword; }
+					case "struct":      { token_type = .Struct_Keyword; }
 					case "union":       { token_type = .Union; }
 					case "const":       { token_type = .Const; }
 					case "sizeof":      { token_type = .Sizeof; }

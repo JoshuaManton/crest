@@ -2,7 +2,7 @@ package crest
 
 using import "shared:workbench/logging"
 
-_Declaration :: struct {
+Declaration :: struct {
 	name: string,
 	constant_value: Constant_Value,
 	kind: Declaration_Kind,
@@ -50,7 +50,7 @@ try_resolve_identifier :: proc(ident: ^Ast_Identifier) -> bool {
 	return false;
 }
 
-try_find_declaration_in_block :: proc(block: ^Ast_Block, name: string) -> ^_Declaration {
+try_find_declaration_in_block :: proc(block: ^Ast_Block, name: string) -> ^Declaration {
 	for sym in block.declarations {
 		if sym.name == name {
 			return sym;
@@ -59,10 +59,10 @@ try_find_declaration_in_block :: proc(block: ^Ast_Block, name: string) -> ^_Decl
 	return nil;
 }
 
-create_declaration :: proc(block: ^Ast_Block, name: string, type: ^Type = nil, loc := #caller_location) -> ^_Declaration {
+create_declaration :: proc(block: ^Ast_Block, name: string, type: ^Type = nil, loc := #caller_location) -> ^Declaration {
 	assert(block != nil);
 
-	decl := new_clone(_Declaration{name, nil, nil});
+	decl := new_clone(Declaration{name, nil, nil});
 	if type != nil {
 		decl.kind = Type_Decl{type};
 		decl.constant_value = type.id;
@@ -71,7 +71,7 @@ create_declaration :: proc(block: ^Ast_Block, name: string, type: ^Type = nil, l
 	return decl;
 }
 
-complete_declaration :: inline proc(decl: ^_Declaration, kind: $T) {
+complete_declaration :: inline proc(decl: ^Declaration, kind: $T) {
 	decl.kind = kind;
 }
 

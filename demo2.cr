@@ -1,11 +1,23 @@
+struct Vector2 {
+	var x: float;
+	var y: float;
+}
+
 proc main() {
-	var x: int = foo(8, 9) + foo(foo(8, 9), 3);
+	var aa: Vector2;
+	aa.x = 5;
+	aa.y = 2;
+
+	var bb: Vector2;
+	bb.x = 3;
+	bb.y = 1;
+
+	var vec = add(aa, bb);
 }
 
-proc foo(a: int, b: int) int {
-	return bar(a, b);
-}
-
-proc bar(a: int, b: int) int {
-	return a * b;
+proc add(v1: Vector2, v2: Vector2) Vector2 {
+	var result: Vector2;
+	result.x = v1.x + v2.x;
+	result.y = v1.y + v2.y;
+	return result;
 }

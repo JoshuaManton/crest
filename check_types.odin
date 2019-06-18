@@ -42,7 +42,9 @@ Type_Proc :: struct {
 
 Type_Struct :: struct {
 	name: string,
-	fields: []Field,
+	fields: []string,
+	types: []^Type,
+	offsets: []u64, // note(josh): in bytes
 }
 
 Type :: struct {

@@ -371,9 +371,9 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				error(node, "Selector only works for struct types right now.");
 				return .Error;
 			}
-			for field in left_struct.fields {
-				if field.name == kind.field {
-					complete_expr(node, field.inferred_type);
+			for field, field_idx in left_struct.fields {
+				if field == kind.field {
+					complete_expr(node, left_struct.types[field_idx]);
 					return .Ok;
 				}
 			}
@@ -1051,14 +1051,22 @@ make_type_distinct :: proc(ws: ^Workspace, new_name: string, t: ^Type) -> ^Type 
 make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type {
 	size : uint = 0;
 	aligned_size : uint = 0;
+	// lotsa allocations here that probably dont need to be here
+	names: [dynamic]string;
+	offsets: [dynamic]u64;
+	types: [dynamic]^Type;
 	for var in fields {
 		assert(var.inferred_type != nil);
+		append(&names, var.name);
+		append(&offsets, cast(u64)aligned_size);
+		append(&types, var.inferred_type);
+
 		size += var.inferred_type.packed_size;
 		aligned_size += var.inferred_type.aligned_size;
 	}
 
 	assert(size != 0);
-	new_type := make_type(ws, size, Type_Struct{name, fields}, {}, aligned_size);
+	new_type := make_type(ws, size, Type_Struct{name, names[:], types[:], offsets[:]}, {}, aligned_size);
 	return new_type;
 }
 

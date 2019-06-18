@@ -664,7 +664,7 @@ parse_proc_decl :: proc(ws: ^Workspace) -> ^Ast_Proc {
 }
 
 parse_struct_decl :: proc(ws: ^Workspace) -> ^Ast_Node {
-	struct_token := expect(Token_Type.Type_Keyword);
+	struct_token := expect(Token_Type.Struct_Keyword);
 	name_token := expect(Token_Type.Ident);
 	decl := create_declaration(ws.current_scope, name_token.text, nil);
 
@@ -832,7 +832,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			}
 			return var.base;
 		}
-		case .Type_Keyword: {
+		case .Struct_Keyword: {
 			s := parse_struct_decl(ws);
 			return s;
 		}

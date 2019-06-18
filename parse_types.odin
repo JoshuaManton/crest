@@ -72,7 +72,7 @@ Ast_Proc :: struct {
 
 	signature_type: ^Type,
 	return_type: ^Type,
-	declaration: ^_Declaration,
+	declaration: ^Declaration,
 
 	variables: [dynamic]^Ast_Var,
 	output_name: string,
@@ -85,7 +85,7 @@ Ast_Var :: struct {
 	name: string,
 	typespec: ^Ast_Typespec,
 	expr: ^Ast_Node,
-	declaration: ^_Declaration,
+	declaration: ^Declaration,
 	is_constant: bool,
 	type: ^Type,
 
@@ -97,7 +97,7 @@ Ast_Struct :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	fields: []^Ast_Var,
-	declaration: ^_Declaration,
+	declaration: ^Declaration,
 	struct_type: ^Type,
 }
 
@@ -105,13 +105,13 @@ Ast_Typedef :: struct {
 	using base: ^Ast_Node,
 	name: string,
 	other: ^Ast_Typespec,
-	declaration: ^_Declaration,
+	declaration: ^Declaration,
 }
 
 Ast_Identifier :: struct {
 	using base: ^Ast_Node,
 	name: string,
-	declaration: ^_Declaration,
+	declaration: ^Declaration,
 }
 
 Ast_Assign :: struct {
@@ -162,7 +162,7 @@ Ast_Return :: struct {
 Ast_Block :: struct {
 	using base: ^Ast_Node,
 	stmts: [dynamic]^Ast_Node,
-	declarations: [dynamic]^_Declaration,
+	declarations: [dynamic]^Declaration,
 	register_allocations: [dynamic]Register_Allocation,
 	next_available_register: u64,
 }

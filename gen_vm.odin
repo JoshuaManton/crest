@@ -26,9 +26,10 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 	// assert(foo_decl != nil);
 	// foo_proc := foo_decl.kind.(Proc_Decl).procedure;
 
-	x_decl := try_find_declaration_in_block(main_proc.block, "x");
-	assert(x_decl != nil);
-	println("x is:", ws.vm.register_memory[x_decl.kind.(Var_Decl).var.register.start]);
+	vec_decl := try_find_declaration_in_block(main_proc.block, "vec");
+	assert(vec_decl != nil);
+	println("vec.x is:", ws.vm.register_memory[vec_decl.kind.(Var_Decl).var.register.start]);
+	println("vec.y is:", ws.vm.register_memory[vec_decl.kind.(Var_Decl).var.register.start+1]);
 }
 
 emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc, is_main := false) {
@@ -85,6 +86,9 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc = nil
 			case Ast_Assign: {
 				emit_assign(ws, kind);
 			}
+			case Ast_Comment: {
+				// nothing
+			}
 			case: assert(false, tprint(kind));
 		}
 	}
@@ -100,18 +104,53 @@ emit_copy :: proc(ws: ^Workspace, dst: Register_Allocation, src: Register_Alloca
 
 emit_assign :: proc(ws: ^Workspace, assign: ^Ast_Assign) {
 	rhs_reg := emit_expr(ws, assign.right);
-	var := assign.left.derived.(Ast_Identifier).declaration.kind.(Var_Decl).var; // todo(josh): other types of rhs than vars
+
+	storage := find_storage(assign.left);
 	switch assign.op {
 		case .Assign: {
-			emit_copy(ws, var.register, rhs_reg);
+			emit_copy(ws, storage, rhs_reg);
 		}
 		case .Plus_Assign: {
-			assert(var.register.size == 1); // todo(josh): array programming?
-			assert(rhs_reg.size == var.register.size);
-			add(&ws.vm, var.register.start, var.register.start, rhs_reg.start);
+			assert(storage.size == 1); // todo(josh): array programming?
+			assert(rhs_reg.size == storage.size);
+			add(&ws.vm, storage.start, storage.start, rhs_reg.start);
 		}
 		case: assert(false, tprint(assign.op));
 	}
+}
+
+find_storage :: proc(node: ^Ast_Node) -> Register_Allocation {
+	switch kind in node.derived {
+		case Ast_Identifier: {
+			switch decl_kind in kind.declaration.kind {
+				case Var_Decl: {
+					assert(decl_kind.var.register.size > 0);
+					return decl_kind.var.register;
+				}
+				case: assert(false, tprint(decl_kind));
+			}
+		}
+		case Ast_Selector: {
+			var_storage := find_storage(kind.left);
+			ss := &kind.left.expr_type.kind.(Type_Struct);
+			idx := get_field_idx(ss, kind.field);
+			storage := Register_Allocation{var_storage.start+(ss.offsets[idx] / TARGET_PLATFORM_ALIGNMENT), ss.types[idx].register_size};
+			return storage;
+		}
+		case: assert(false, tprint(kind));
+	}
+	unreachable();
+	return {};
+}
+
+get_field_idx :: proc(type: ^Type_Struct, name: string) -> int {
+	for field, idx in type.fields {
+		if field == name {
+			return idx;
+		}
+	}
+	unreachable();
+	return {};
 }
 
 emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
@@ -201,6 +240,11 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 
 		case Ast_Call: {
 			emit_call(ws, kind, &result_register);
+		}
+
+		case Ast_Selector: {
+			storage := find_storage(kind);
+			emit_copy(ws, result_register, storage);
 		}
 
 		case: assert(false, tprint(kind));
@@ -310,11 +354,12 @@ alloc_register :: proc(procedure: ^Ast_Proc, type: ^Type, loc := #caller_locatio
 		size = 1;
 	}
 	assert(size != 0, tprint(type.kind));
-	assert(size == 1);
+
 	register := procedure.block.next_available_register;
 	procedure.block.next_available_register += size;
 	result := Register_Allocation{register, size};
 	append(&procedure.block.register_allocations, result);
+
 	return result;
 }
 
