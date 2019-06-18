@@ -12,7 +12,7 @@ proc main() {
 	bb.x = 3;
 	bb.y = 1;
 
-	var vec = add(aa, bb);
+	var vec = add(aa, add(aa, bb));
 }
 
 proc add(v1: Vector2, v2: Vector2) Vector2 {
