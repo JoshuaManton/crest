@@ -23,7 +23,7 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block = nil) ->
 parse_text :: proc(ws: ^Workspace, text: string, scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
 	if scope == nil {
 		assert(ws.global_scope == nil);
-		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil, 0});
+		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil, {}, 0});
 		scope = ws.global_scope;
 	}
 
@@ -104,8 +104,6 @@ unexpected_token :: proc(token: Token, loc: rt.Source_Code_Location, expected: .
 	else {
 		print("\n");
 	}
-
-	println(loc);
 }
 
 is_token :: inline proc(kinds: ..Token_Type) -> bool {
@@ -920,7 +918,7 @@ parse_block :: proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Block {
 
 	curly := expect(Left_Curly);
 
-	new_scope := node(ws, curly, Ast_Block{{}, nil, nil, 0});
+	new_scope := node(ws, curly, Ast_Block{{}, nil, nil, {}, 0});
 	old_current_block := ws.current_scope;
 	ws.current_scope = new_scope;
 	defer ws.current_scope = old_current_block;

@@ -163,7 +163,8 @@ Ast_Block :: struct {
 	using base: ^Ast_Node,
 	stmts: [dynamic]^Ast_Node,
 	declarations: [dynamic]^_Declaration,
-	current_register: u64,
+	register_allocations: [dynamic]Register_Allocation,
+	next_available_register: u64,
 }
 
 Ast_Call :: struct {

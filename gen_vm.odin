@@ -1,6 +1,7 @@
 package crest
 
 using import "core:fmt"
+using import "core:mem"
 using import "shared:workbench/logging"
 using import "../storm"
 
@@ -27,24 +28,24 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 
 	x_decl := try_find_declaration_in_block(main_proc.block, "x");
 	assert(x_decl != nil);
-	println("x is:", ws.vm.register_memory[x_decl.kind.(Var_Decl).var.register.register]);
+	println("x is:", ws.vm.register_memory[x_decl.kind.(Var_Decl).var.register.start]);
 }
 
 emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc, is_main := false) {
-	frame_pointer := procedure.block.current_register;
-	defer procedure.block.current_register = frame_pointer;
-
+	// frame_pointer := procedure.block.current_register;
+	// defer procedure.block.current_register = frame_pointer;
 	label(&ws.vm, procedure.name);
 
 	if !is_main {
 		procedure.return_address_register = alloc_register(procedure, type_u64);
-		stack_pop(&ws.vm, procedure.return_address_register.register);
+		stack_pop(&ws.vm, procedure.return_address_register.start);
 		for param in procedure.params {
 			param.register = alloc_register(procedure, param.type);
 		}
 		for param_idx := len(procedure.params)-1; param_idx >= 0; param_idx -= 1 {
 			param := procedure.params[param_idx];
-			stack_pop(&ws.vm, param.register.register);
+			assert(param.register.size > 0);
+			copy_from_stack(&ws.vm, param.register);
 		}
 	}
 
@@ -70,7 +71,7 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc = nil
 			case Ast_If: {
 				condition_reg := emit_expr(ws, kind.condition);
 				jump_label := aprint("if_", stmt.serial);
-				jez(&ws.vm, jump_label, condition_reg.register);
+				jez(&ws.vm, jump_label, condition_reg.start); // todo(josh): change this to jeq with rz
 				emit_block(ws, kind.block);
 				label(&ws.vm, jump_label);
 			}
@@ -91,9 +92,9 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc = nil
 
 // todo(josh): implement a `copy` instruction in the VM
 emit_copy :: proc(ws: ^Workspace, dst: Register_Allocation, src: Register_Allocation) {
-	assert(dst.num_registers == src.num_registers, tprint(dst, src));
-	for i in 0..<dst.num_registers {
-		mov(&ws.vm, dst.register+i, src.register+i);
+	assert(dst.size == src.size, tprint(dst, src));
+	for i in 0..<dst.size {
+		mov(&ws.vm, dst.start+i, src.start+i);
 	}
 }
 
@@ -105,7 +106,9 @@ emit_assign :: proc(ws: ^Workspace, assign: ^Ast_Assign) {
 			emit_copy(ws, var.register, rhs_reg);
 		}
 		case .Plus_Assign: {
-			add(&ws.vm, var.register.register, var.register.register, rhs_reg.register);
+			assert(var.register.size == 1); // todo(josh): array programming?
+			assert(rhs_reg.size == var.register.size);
+			add(&ws.vm, var.register.start, var.register.start, rhs_reg.start);
 		}
 		case: assert(false, tprint(assign.op));
 	}
@@ -113,20 +116,20 @@ emit_assign :: proc(ws: ^Workspace, assign: ^Ast_Assign) {
 
 emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 	result_register := alloc_register(expr.parent_procedure, expr.expr_type);
-	current_register := expr.parent.current_register;
-	defer expr.parent.current_register = current_register;
+	regs := len(expr.parent.register_allocations);
+	defer set_len(&expr.parent.register_allocations, regs);
 
 	switch kind in &expr.derived {
 		case Ast_Number: {
 			switch number_kind in kind.base.constant_value {
 				case i64: {
-					movis(&ws.vm, result_register.register, number_kind);
+					movis(&ws.vm, result_register.start, number_kind);
 				}
 				case f64: {
-					movif(&ws.vm, result_register.register, number_kind);
+					movif(&ws.vm, result_register.start, number_kind);
 				}
 				case u64: {
-					movi(&ws.vm, result_register.register, number_kind);
+					movi(&ws.vm, result_register.start, number_kind);
 				}
 				case: assert(false, tprint(number_kind));
 			}
@@ -144,51 +147,53 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 		case Ast_Binary: {
 			lhs_reg := emit_expr(ws, kind.lhs);
 			rhs_reg := emit_expr(ws, kind.rhs);
+			assert(lhs_reg.size == 1); // todo(josh): array programming?
+			assert(rhs_reg.size == lhs_reg.size);
 			switch kind.op {
 				case .Plus: {
 					t := kind.lhs.expr_type;
 					if is_integer_type(t) {
 						if is_signed_type(t) {
-							add(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							add(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 						else {
-							addu(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							addu(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 					}
 					else if is_float_type(t) {
-						addf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						addf(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 					}
 				}
 				case .Minus: {
 					t := kind.lhs.expr_type;
 					if is_integer_type(t) {
 						if is_signed_type(t) {
-							sub(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							sub(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 						else {
-							subu(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							subu(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 					}
 					else if is_float_type(t) {
-						subf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						subf(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 					}
 				}
 				case .Multiply: {
 					t := kind.lhs.expr_type;
 					if is_integer_type(t) {
 						if is_signed_type(t) {
-							mul(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							mul(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 						else {
-							mulu(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+							mulu(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 						}
 					}
 					else if is_float_type(t) {
-						mulf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						mulf(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 					}
 				}
 				case .Boolean_Equal: {
-					eq(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+					eq(&ws.vm, result_register.start, lhs_reg.start, rhs_reg.start);
 				}
 				case: assert(false, tprint(kind.op));
 			}
@@ -204,57 +209,96 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 	return result_register;
 }
 
+set_len :: proc(arr: ^[dynamic]$T, length: int) {
+	assert(len(arr) >= length);
+	(cast(^mem.Raw_Dynamic_Array)arr).len = length;
+}
+
+// slice_to_dynamic_array :: proc(slice: []$T, array: ^[dynamic]T) {
+// 	assert(&slice[0] == &array[0]);
+// 	raw_slice := transmute(mem.Raw_Slice)slice;
+// 	cap := cap(array);
+// 	array^ = transmute([dynamic]T) mem.Raw_Dynamic_Array{
+// 	        raw_slice.data,
+// 	        raw_slice.len,
+// 	        cap,
+// 	        array.allocator,
+// 	    };
+// }
+
 emit_call :: proc(ws: ^Workspace, ast_call: ^Ast_Call, result_register: ^Register_Allocation) {
-	regs_before_args := ast_call.parent_procedure.block.current_register-1;
+	regs_before_args := len(ast_call.parent_procedure.block.register_allocations);
+	defer set_len(&ast_call.parent_procedure.block.register_allocations, regs_before_args);
+
+	call_result: Register_Allocation;
+	if result_register != nil {
+		assert(ast_call.expr_type != nil);
+		call_result = alloc_register(ast_call.parent_procedure, ast_call.expr_type);
+	}
+
 	args: [dynamic]Register_Allocation;
 	defer delete(args); // bleh
 	for arg in ast_call.args {
 		result := emit_expr(ws, arg);
 		append(&args, result);
 	}
-	for r in 0..regs_before_args {
-		if result_register != nil && r == result_register.register {
+	for reg_idx in 0..<regs_before_args {
+		reg := ast_call.parent_procedure.block.register_allocations[reg_idx];
+		if result_register != nil && reg.start == result_register.start {
 			continue;
 		}
-		stack_push(&ws.vm, r);
+		copy_to_stack(&ws.vm, reg);
 	}
 	for arg in args {
-		stack_push(&ws.vm, arg.register);
+		copy_to_stack(&ws.vm, arg);
 	}
 
 	call(&ws.vm, ast_call.procedure.derived.(Ast_Identifier).name);
 
-	if result_register != nil {
-		assert(ast_call.expr_type != nil);
-		stack_pop(&ws.vm, result_register.register);
-	}
-	else {
-		if ast_call.expr_type != nil {
-			stack_pop(&ws.vm, rz);
+	if call_result.size > 0 {
+		if result_register != nil {
+			copy_from_stack(&ws.vm, result_register^);
 		}
 	}
 
-	if regs_before_args > 0 {
-		i := regs_before_args;
-		for {
-			defer i -= 1;
-			if result_register != nil && i == result_register.register {
-				continue;
-			}
-			stack_pop(&ws.vm, i);
-			if i == 0 do break;
+	for reg_idx := regs_before_args-1; reg_idx	>= 0; reg_idx -= 1 {
+		reg := ast_call.parent_procedure.block.register_allocations[reg_idx];
+		if result_register != nil && reg.start == result_register.start {
+			continue;
 		}
+		copy_from_stack(&ws.vm, reg);
 	}
 }
 
 emit_return :: proc(ws: ^Workspace, procedure: ^Ast_Proc, expr: ^Ast_Node) {
-	assert(procedure.return_address_register.num_registers > 0);
+	assert(procedure.return_address_register.size > 0);
 	if expr != nil {
 		return_value_reg := emit_expr(ws, expr);
-		stack_push(&ws.vm, return_value_reg.register);
+		copy_to_stack(&ws.vm, return_value_reg);
 	}
-	addi(&ws.vm, procedure.return_address_register.register, procedure.return_address_register.register, 1);
-	mov(&ws.vm, rip, procedure.return_address_register.register);
+	addi(&ws.vm, procedure.return_address_register.start, procedure.return_address_register.start, 1);
+	mov(&ws.vm, rip, procedure.return_address_register.start);
+}
+
+copy_to_stack :: proc(vm: ^VM, ra: Register_Allocation) {
+	for r in ra.start..<ra.start+ra.size {
+		stack_push(vm, r);
+	}
+}
+
+copy_from_stack :: proc(vm: ^VM, ra: Register_Allocation, to_zero: bool = false) {
+	for r := ra.start + ra.size-1; r >= ra.start; r -= 1 {
+		if to_zero {
+			stack_pop(vm, rz);
+		}
+		else {
+			stack_pop(vm, r);
+		}
+
+		if r == 0 {
+			break;
+		}
+	}
 }
 
 alloc_register :: proc(procedure: ^Ast_Proc, type: ^Type, loc := #caller_location) -> Register_Allocation {
@@ -267,13 +311,14 @@ alloc_register :: proc(procedure: ^Ast_Proc, type: ^Type, loc := #caller_locatio
 	}
 	assert(size != 0, tprint(type.kind));
 	assert(size == 1);
-	register := procedure.block.current_register;
-	procedure.block.current_register += size;
+	register := procedure.block.next_available_register;
+	procedure.block.next_available_register += size;
 	result := Register_Allocation{register, size};
+	append(&procedure.block.register_allocations, result);
 	return result;
 }
 
 Register_Allocation :: struct {
-	register: u64,
-	num_registers: u64,
+	start: u64,
+	size: u64,
 }
