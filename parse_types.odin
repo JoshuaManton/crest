@@ -76,6 +76,8 @@ Ast_Proc :: struct {
 
 	variables: [dynamic]^Ast_Var,
 	output_name: string,
+
+	return_address_register: Register_Allocation,
 }
 
 Ast_Var :: struct {
@@ -269,6 +271,7 @@ Ast_Node :: struct {
 	depends: [dynamic]^Ast_Node,
 	expr_type: ^Type,
 	constant_value: Constant_Value,
+	parent_procedure: ^Ast_Proc,
 	do_not_print: bool,
 }
 

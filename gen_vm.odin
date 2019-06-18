@@ -21,13 +21,13 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 
 	execute(&ws.vm);
 
-	foo_decl := try_find_declaration_in_block(ws.global_scope, "foo");
-	assert(foo_decl != nil);
-	foo_proc := foo_decl.kind.(Proc_Decl).procedure;
+	// foo_decl := try_find_declaration_in_block(ws.global_scope, "foo");
+	// assert(foo_decl != nil);
+	// foo_proc := foo_decl.kind.(Proc_Decl).procedure;
 
 	x_decl := try_find_declaration_in_block(main_proc.block, "x");
 	assert(x_decl != nil);
-	println(ws.vm.register_memory[x_decl.kind.(Var_Decl).var.register.register]);
+	println("x is:", ws.vm.register_memory[x_decl.kind.(Var_Decl).var.register.register]);
 }
 
 emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc, is_main := false) {
@@ -37,26 +37,28 @@ emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc, is_main := false) {
 	label(&ws.vm, procedure.name);
 
 	if !is_main {
-		stack_pop(&ws.vm, rt);
-		i : u64 = 0;
+		procedure.return_address_register = alloc_register(procedure, type_u64);
+		stack_pop(&ws.vm, procedure.return_address_register.register);
 		for param in procedure.params {
-			stack_pop(&ws.vm, i);
-			i += 1;
+			param.register = alloc_register(procedure, param.type);
 		}
-		stack_push(&ws.vm, rt);
-	}
-	
-	for var in procedure.variables {
-		var.register = alloc_register(procedure.block, var.type);
+		for param_idx := len(procedure.params)-1; param_idx >= 0; param_idx -= 1 {
+			param := procedure.params[param_idx];
+			stack_pop(&ws.vm, param.register.register);
+		}
 	}
 
-	emit_block(ws, procedure.block);
+	for var in procedure.variables {
+		var.register = alloc_register(procedure, var.type);
+	}
+
+	emit_block(ws, procedure.block, procedure);
 	if !is_main {
-		emit_return(ws, nil);
+		emit_return(ws, procedure, nil);
 	}
 }
 
-emit_block :: proc(ws: ^Workspace, block: ^Ast_Block) {
+emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc = nil) {
 	for stmt in block.stmts {
 		switch kind in &stmt.derived {
 			case Ast_Var: {
@@ -67,17 +69,17 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block) {
 			}
 			case Ast_If: {
 				condition_reg := emit_expr(ws, kind.condition);
-				movi(&ws.vm, rim, 1);
 				jump_label := aprint("if_", stmt.serial);
-				jlt(&ws.vm, jump_label, condition_reg.register, rim);
+				jez(&ws.vm, jump_label, condition_reg.register);
 				emit_block(ws, kind.block);
 				label(&ws.vm, jump_label);
 			}
 			case Ast_Return: {
-				emit_return(ws, kind.expr);
+				assert(procedure != nil);
+				emit_return(ws, procedure, kind.expr);
 			}
 			case Ast_Call: {
-				emit_call(ws, kind);
+				emit_call(ws, kind, nil);
 			}
 			case Ast_Assign: {
 				emit_assign(ws, kind);
@@ -89,7 +91,7 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block) {
 
 // todo(josh): implement a `copy` instruction in the VM
 emit_copy :: proc(ws: ^Workspace, dst: Register_Allocation, src: Register_Allocation) {
-	assert(dst.num_registers == src.num_registers);
+	assert(dst.num_registers == src.num_registers, tprint(dst, src));
 	for i in 0..<dst.num_registers {
 		mov(&ws.vm, dst.register+i, src.register+i);
 	}
@@ -110,7 +112,10 @@ emit_assign :: proc(ws: ^Workspace, assign: ^Ast_Assign) {
 }
 
 emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
-	result_register := alloc_register(expr.parent, expr.expr_type);
+	result_register := alloc_register(expr.parent_procedure, expr.expr_type);
+	current_register := expr.parent.current_register;
+	defer expr.parent.current_register = current_register;
+
 	switch kind in &expr.derived {
 		case Ast_Number: {
 			switch number_kind in kind.base.constant_value {
@@ -154,6 +159,34 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 						addf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
 					}
 				}
+				case .Minus: {
+					t := kind.lhs.expr_type;
+					if is_integer_type(t) {
+						if is_signed_type(t) {
+							sub(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						}
+						else {
+							subu(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						}
+					}
+					else if is_float_type(t) {
+						subf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+					}
+				}
+				case .Multiply: {
+					t := kind.lhs.expr_type;
+					if is_integer_type(t) {
+						if is_signed_type(t) {
+							mul(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						}
+						else {
+							mulu(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+						}
+					}
+					else if is_float_type(t) {
+						mulf(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
+					}
+				}
 				case .Boolean_Equal: {
 					eq(&ws.vm, result_register.register, lhs_reg.register, rhs_reg.register);
 				}
@@ -162,7 +195,7 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 		}
 
 		case Ast_Call: {
-			emit_call(ws, kind, &result_register, kind.expr_type);
+			emit_call(ws, kind, &result_register);
 		}
 
 		case: assert(false, tprint(kind));
@@ -171,48 +204,73 @@ emit_expr :: proc(ws: ^Workspace, expr: ^Ast_Node) -> Register_Allocation {
 	return result_register;
 }
 
-emit_call :: proc(ws: ^Workspace, ast_call: ^Ast_Call, result_register: ^Register_Allocation = nil, result_type: ^Type = nil) {
+emit_call :: proc(ws: ^Workspace, ast_call: ^Ast_Call, result_register: ^Register_Allocation) {
+	regs_before_args := ast_call.parent_procedure.block.current_register-1;
+	args: [dynamic]Register_Allocation;
+	defer delete(args); // bleh
 	for arg in ast_call.args {
-		reg := emit_expr(ws, arg);
+		result := emit_expr(ws, arg);
+		append(&args, result);
 	}
-	for i in 0..<ast_call.parent.current_register {
-		stack_push(&ws.vm, i);
+	for r in 0..regs_before_args {
+		if result_register != nil && r == result_register.register {
+			continue;
+		}
+		stack_push(&ws.vm, r);
 	}
-	call(&ws.vm, ast_call.procedure.derived.(Ast_Identifier).name);
-	// if result_register != nil {
-	// 	stack_pop(&ws.vm, result_register.register);
-	// }
+	for arg in args {
+		stack_push(&ws.vm, arg.register);
+	}
 
-	if ast_call.parent.current_register > 0 {
-		i := ast_call.parent.current_register-1;
+	call(&ws.vm, ast_call.procedure.derived.(Ast_Identifier).name);
+
+	if result_register != nil {
+		assert(ast_call.expr_type != nil);
+		stack_pop(&ws.vm, result_register.register);
+	}
+	else {
+		if ast_call.expr_type != nil {
+			stack_pop(&ws.vm, rz);
+		}
+	}
+
+	if regs_before_args > 0 {
+		i := regs_before_args;
 		for {
+			defer i -= 1;
+			if result_register != nil && i == result_register.register {
+				continue;
+			}
 			stack_pop(&ws.vm, i);
 			if i == 0 do break;
-			i -= 1;
 		}
 	}
 }
 
-emit_return :: proc(ws: ^Workspace, expr: ^Ast_Node) {
-	stack_pop(&ws.vm, rt);
+emit_return :: proc(ws: ^Workspace, procedure: ^Ast_Proc, expr: ^Ast_Node) {
+	assert(procedure.return_address_register.num_registers > 0);
 	if expr != nil {
 		return_value_reg := emit_expr(ws, expr);
 		stack_push(&ws.vm, return_value_reg.register);
 	}
-	addi(&ws.vm, rt, rt, 1);
-	ret(&ws.vm);
+	addi(&ws.vm, procedure.return_address_register.register, procedure.return_address_register.register, 1);
+	mov(&ws.vm, rip, procedure.return_address_register.register);
 }
 
-alloc_register :: proc(block: ^Ast_Block, type: ^Type, loc := #caller_location) -> Register_Allocation {
+alloc_register :: proc(procedure: ^Ast_Proc, type: ^Type, loc := #caller_location) -> Register_Allocation {
+	assert(procedure != nil);
 	size := type.register_size;
 	if is_untyped_type(type) {
 		// todo(josh): figure this out properly. I don't know how to handle untyped stuff here
+		// maybe there should be no untyped types at this point??
 		size = 1;
 	}
 	assert(size != 0, tprint(type.kind));
-	register := block.current_register;
-	block.current_register += size;
-	return Register_Allocation{register, size};
+	assert(size == 1);
+	register := procedure.block.current_register;
+	procedure.block.current_register += size;
+	result := Register_Allocation{register, size};
+	return result;
 }
 
 Register_Allocation :: struct {

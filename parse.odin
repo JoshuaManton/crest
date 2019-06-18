@@ -73,6 +73,7 @@ _alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #ca
 		nil,
 		nil,
 		nil,
+		currently_parsing_procedure,
 		false,
 	};
 

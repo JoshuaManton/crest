@@ -104,7 +104,7 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 
 
 
-		for t in ([?]^Type{type_i8, type_i16, type_i32, type_i64}) {
+		for t in ([?]^Type{type_i8, type_i16, type_i32, type_i64, type_untyped_int}) {
 			add_equality_operators(t, i64);
 			add_less_and_greater_than_operators(t, i64);
 			add_math_operators(t, i64);
@@ -117,7 +117,7 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 			add_math_operators(t, i64);
 		}
 		// floats
-		for t in ([?]^Type{type_f32, type_f64}) {
+		for t in ([?]^Type{type_f32, type_f64, type_untyped_float}) {
 			add_equality_operators(t, f64);
 			add_less_and_greater_than_operators(t, f64);
 			add_math_operators(t, f64);
@@ -502,7 +502,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				else if true_type == type_untyped_float do true_type = type_float;
 				else do assert(false, tprint("Unhandled untyped type: ", true_type.kind));
 			}
-				
+
 
 			assert(true_type != nil);
 
@@ -575,6 +575,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			if len(kind.args) != len(proc_type.params) {
 				error(node, "Expected ", len(proc_type.params), " parameters, got ", len(kind.args));
+				return .Error;
 			}
 
 			for _, idx in kind.args {
