@@ -159,7 +159,6 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 			type_add_operator(type, .Boolean_Greater_Than,          type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) >  b.(Constant_Type); });
 			type_add_operator(type, .Boolean_Less_Than_Or_Equal,    type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) <= b.(Constant_Type); });
 			type_add_operator(type, .Boolean_Greater_Than_Or_Equal, type_bool, proc(a, b: Constant_Value) -> Constant_Value { return a.(Constant_Type) >= b.(Constant_Type); });
-
 		}
 	}
 }
@@ -333,12 +332,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(ltype, kind.rhs);
 				return .Error;
 			}
-
-			// result_type := get_result_type(ltype, rtype);
-			// if result_type == nil {
-			// 	type_mismatch(ltype, kind.rhs, node);
-			// 	return .Error;
-			// }
 
 			operator_info, ok := type_get_operator(ltype, kind.op);
 			if !ok {
@@ -900,6 +893,7 @@ is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location)
 	//
 	if lhs == rhs do return true;
 
+	//
 	if is_untyped_type(rhs) {
 		if is_integer_type(rhs) && is_integer_type(lhs) {
 			return true;
@@ -908,28 +902,11 @@ is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location)
 			return true;
 		}
 
-		// any number can be assigned to floats
+		// any untyped number can be assigned to floats
 		if is_numeric_type(rhs) && is_float_type(lhs) {
 			return true;
 		}
 	}
-
-	// todo(josh): untyped_numbers
-	//
-	// if is_signed_integer_type(wanted) && given == type_untyped_int do return true;
-
-	// if is_float_type(wanted) && given == type_untyped_int   do return true;
-	// if is_float_type(wanted) && given == type_untyped_float do return true;
-
-	//
-	// @UnionTypes
-	// if union_type, ok := wanted.kind.(Type_Union); ok {
-	// 	for kind in union_type.types {
-	// 		if given == kind do return true;
-	// 	}
-
-	// 	return false;
-	// }
 
 	return false;
 }
