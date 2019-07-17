@@ -1,5 +1,7 @@
 package crest
 
+      import "../storm"
+
 Ast_Typespec :: struct {
 	using base: ^Ast_Node,
 	completed_type: ^Type,
@@ -77,7 +79,10 @@ Ast_Proc :: struct {
 	variables: [dynamic]^Ast_Var,
 	output_name: string,
 
-	return_address_register: Register_Allocation,
+	stack_frame_size: u64,
+	return_address_reg: Register_Allocation,
+	stack_pointer_reg:  Register_Allocation,
+	registers_in_use: [dynamic]Register_Allocation,
 }
 
 Ast_Var :: struct {
@@ -86,11 +91,14 @@ Ast_Var :: struct {
 	typespec: ^Ast_Typespec,
 	expr: ^Ast_Node,
 	declaration: ^Declaration,
-	is_constant: bool,
 	type: ^Type,
 
+	is_constant: bool,
+	is_local: bool,
 	is_typedef: bool,
-	register: Register_Allocation,
+
+	offset_in_stack_frame: u64,
+	// active_register: Maybe(Register_Allocation),
 }
 
 Ast_Struct :: struct {
@@ -163,8 +171,6 @@ Ast_Block :: struct {
 	using base: ^Ast_Node,
 	stmts: [dynamic]^Ast_Node,
 	declarations: [dynamic]^Declaration,
-	register_allocations: [dynamic]Register_Allocation,
-	next_available_register: u64,
 }
 
 Ast_Call :: struct {
@@ -221,7 +227,10 @@ Ast_String :: struct {
 
 Ast_Number :: struct {
 	using base: ^Ast_Node,
-	value: union{i64, f64, u64},
+	int_value:   i64,
+	uint_value:  u64,
+	float_value: f64,
+	has_a_dot:   bool,
 }
 
 Ast_Null :: struct {
@@ -300,4 +309,8 @@ Site :: struct {
 	filename: string,
 	line: int,
 	column: int,
+}
+
+Maybe :: union(T: typeid) {
+	T,
 }

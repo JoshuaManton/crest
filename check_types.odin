@@ -5,7 +5,7 @@ Type_Ptr :: struct {
 }
 
 Type_Array :: struct {
-	length: uint,
+	length: u64,
 	array_of: ^Type,
 }
 
@@ -62,12 +62,13 @@ Type :: struct {
 
 		Type_Proc,
 	},
-	id:           TypeID,
-	packed_size:   uint,
-	aligned_size:  uint,
-	register_size: u64,
-	flags:         u32,
-	operators:     map[Operator]Operator_Info,
+	id:    TypeID,
+	size:  u64,
+	flags: u32,
+
+	binary_operators: map[Operator]Binary_Operator_Info,
+	unary_operators:  map[Operator]Unary_Operator_Info,
+	constant_conversions: map[^Type]proc(Constant_Value) -> Constant_Value,
 }
 
 Check_State :: enum {
@@ -87,8 +88,13 @@ Type_Flags :: enum u32 {
 	Untyped   = 1 << 7,
 }
 
-Operator_Info :: struct {
+Binary_Operator_Info :: struct {
 	result_type: ^Type,
 	constant_evaluation_procedure: proc(Constant_Value, Constant_Value) -> Constant_Value,
 	constant_only: bool,
+}
+
+Unary_Operator_Info :: struct {
+	result_type: ^Type,
+	constant_evaluation_procedure: proc(Constant_Value) -> Constant_Value,
 }

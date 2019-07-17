@@ -37,8 +37,6 @@ Workspace :: struct {
 	all_procedures: [dynamic]^Ast_Proc,
 	all_global_variables: [dynamic]^Ast_Var,
 
-	vm: VM,
-
 	// ir_procedures: [dynamic]^IR_Procedure,
 	// ir_global_fields: [dynamic]^IR_Field,
 }

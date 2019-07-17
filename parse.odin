@@ -23,7 +23,7 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block = nil) ->
 parse_text :: proc(ws: ^Workspace, text: string, scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
 	if scope == nil {
 		assert(ws.global_scope == nil);
-		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil, {}, 0});
+		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
 		scope = ws.global_scope;
 	}
 
@@ -284,11 +284,13 @@ parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 			return expr.base;
 		}
 		case Integer_Literal: {
-			num := node(ws, token, Ast_Number{{}, strconv.parse_i64(token.text)});
+			uint_value := strconv.parse_u64(token.text);
+			num := node(ws, token, Ast_Number{{}, cast(i64)uint_value, uint_value, cast(f64)uint_value, false});
 			return num.base;
 		}
 		case Float_Literal: {
-			num := node(ws, token, Ast_Number{{}, strconv.parse_f64(token.text)});
+			float_value := strconv.parse_f64(token.text);
+			num := node(ws, token, Ast_Number{{}, cast(i64)float_value, cast(u64)float_value, float_value, true});
 			return num.base;
 		}
 		case String_Literal: {
@@ -501,7 +503,7 @@ parse_expr :: inline proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Node 
 	return parse_or_expr(ws);
 }
 
-parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) -> ^Ast_Var {
+parse_var_decl :: proc(ws: ^Workspace, require_var := true) -> ^Ast_Var {
 	using Token_Type;
 
 	root_token: Token;
@@ -519,13 +521,10 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 	name := name_token.text;
 
 	decl := create_declaration(ws.current_scope, name, nil);
+	is_local := currently_parsing_procedure != nil; // todo(josh): should this be done here or in the typechecker?
 
 	typespec: ^Ast_Typespec;
 	value: ^Ast_Node;
-
-	if only_name {
-		return node(ws, root_token, Ast_Var{{}, name, nil, nil, decl, false, nil, false, {}});
-	}
 
 	if is_token(Colon) {
 		next_token();
@@ -544,7 +543,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true, only_name := false) 
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, false, nil, false, {}});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, nil, false, is_local, false, 0});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -752,6 +751,7 @@ parse_loop :: proc(ws: ^Workspace) -> ^Ast_Node {
 		return while_stmt.base;
 	}
 
+/*
 	assert(root_token.kind == For);
 	// C-style for loop
 
@@ -778,8 +778,10 @@ parse_loop :: proc(ws: ^Workspace) -> ^Ast_Node {
 	if condition != nil do depend(ws, loop, condition);
 	if post_stmt != nil do depend(ws, loop, post_stmt);
 	depend(ws, loop, block);
-
 	return loop.base;
+*/
+	unimplemented();
+	return nil;
 }
 
 parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
@@ -918,7 +920,7 @@ parse_block :: proc(ws: ^Workspace, loc := #caller_location) -> ^Ast_Block {
 
 	curly := expect(Left_Curly);
 
-	new_scope := node(ws, curly, Ast_Block{{}, nil, nil, {}, 0});
+	new_scope := node(ws, curly, Ast_Block{{}, nil, nil});
 	old_current_block := ws.current_scope;
 	ws.current_scope = new_scope;
 	defer ws.current_scope = old_current_block;

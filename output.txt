@@ -1,0 +1,47 @@
+Generated 16 Instructions
+0 Instruction{kind = MOV, p1 = 0, p2 = 14, p3 = 0}
+registers: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+stack:     []
+1 Instruction{kind = ADDUIM, p1 = 14, p2 = 14, p3 = 4}
+registers: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4, 0]
+stack:     [0, 0, 0, 0]
+2 Instruction{kind = MOVI, p1 = 1, p2 = 10, p3 = 0}
+registers: [0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 0]
+stack:     [0, 0, 0, 0]
+3 Instruction{kind = SVO32, p1 = 0, p2 = 0, p3 = 1}
+registers: [0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 4, 0]
+stack:     [10, 0, 0, 0]
+4 Instruction{kind = PUSH, p1 = 0, p2 = 8, p3 = 0}
+registers: [0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+5 Instruction{kind = PUSH, p1 = 13, p2 = 8, p3 = 0}
+registers: [0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 20, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0]
+6 Instruction{kind = GOTO, p1 = 0, p2 = 10, p3 = 0}
+registers: [0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0]
+10 Instruction{kind = POP, p1 = 0, p2 = 8, p3 = 0}
+registers: [5, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+11 Instruction{kind = MOV, p1 = 1, p2 = 14, p3 = 0}
+registers: [5, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+12 Instruction{kind = ADDUIM, p1 = 14, p2 = 14, p3 = 0}
+registers: [5, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+13 Instruction{kind = MOV, p1 = 14, p2 = 1, p3 = 0}
+registers: [5, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+14 Instruction{kind = ADDIM, p1 = 2, p2 = 0, p3 = 1}
+registers: [5, 12, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+15 Instruction{kind = MOV, p1 = 13, p2 = 2, p3 = 0}
+registers: [5, 12, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 12, 0]
+stack:     [10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+7 Instruction{kind = POP, p1 = 0, p2 = 8, p3 = 0}
+registers: [0, 12, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 4, 0]
+stack:     [10, 0, 0, 0]
+8 Instruction{kind = MOV, p1 = 14, p2 = 0, p3 = 0}
+registers: [0, 12, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0]
+stack:     []
+9 Instruction{kind = QUIT, p1 = 0, p2 = 0, p3 = 0}
