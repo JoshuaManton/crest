@@ -31,7 +31,7 @@ type_float: ^Type;
 type_bool: ^Type;
 
 type_string: ^Type;
-type_rawptr: ^Type;
+// type_rawptr: ^Type;
 // type_list: ^Type;
 // type_slice: ^Type;
 
@@ -45,23 +45,24 @@ constant_precedence_table: map[^Type]int;
 
 init_builtin_types :: proc(using ws: ^Workspace) {
 	if type_i8 == nil {
-		type_i8   = make_type(ws, 1, Type_Primitive{"i8"},   Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_i16  = make_type(ws, 2, Type_Primitive{"i16"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_i32  = make_type(ws, 4, Type_Primitive{"i32"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_i64  = make_type(ws, 8, Type_Primitive{"i64"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_u8   = make_type(ws, 1, Type_Primitive{"u8"},   Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_u16  = make_type(ws, 2, Type_Primitive{"u16"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_u32  = make_type(ws, 4, Type_Primitive{"u32"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_u64  = make_type(ws, 8, Type_Primitive{"u64"},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_f32  = make_type(ws, 4, Type_Primitive{"f32"},  Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
-		type_f64  = make_type(ws, 8, Type_Primitive{"f64"},  Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
-		type_bool = make_type(ws, 1, Type_Primitive{"bool"}, {});
+		type_i8   = make_type(ws, "i8",   1, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i16  = make_type(ws, "i16",  2, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i32  = make_type(ws, "i32",  4, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_i64  = make_type(ws, "i64",  8, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_u8   = make_type(ws, "u8",   1, Type_Integer{false}, Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u16  = make_type(ws, "u16",  2, Type_Integer{false}, Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u32  = make_type(ws, "u32",  4, Type_Integer{false}, Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_u64  = make_type(ws, "u64",  8, Type_Integer{false}, Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_f32  = make_type(ws, "f32",  4, Type_Float{},        Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+		type_f64  = make_type(ws, "f64",  8, Type_Float{},        Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+		type_bool = make_type(ws, "bool", 1, Type_Bool{},         {});
 
 		type_int   = type_i32;
 		type_uint  = type_u32;
 		type_float = type_f32;
 
-		type_rawptr = make_type(ws, POINTER_SIZE, Type_Primitive{"rawptr"}, Type_Flags.Pointer);
+		// todo(josh)
+		// type_rawptr = make_type(ws, POINTER_SIZE, Type_Primitive{"rawptr"}, Type_Flags.Pointer);
 
 		create_declaration(ws.global_scope, "i8",      type_i8);
 		create_declaration(ws.global_scope, "i16",     type_i16);
@@ -77,7 +78,9 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		create_declaration(ws.global_scope, "f64",     type_f64);
 		create_declaration(ws.global_scope, "float",   type_f32);
 		create_declaration(ws.global_scope, "bool",    type_bool);
-		create_declaration(ws.global_scope, "rawptr",  type_rawptr);
+
+		// todo(josh)
+		// create_declaration(ws.global_scope, "rawptr",  type_rawptr);
 
 
 
@@ -100,11 +103,11 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		// type_dynamic_array = make_type_struct(ws, "dynamic array", dynamic_array_fields[:]);
 
 		// todo:(josh): currently operators are preserved when making a distinct type, so adding two type_ids together will not error as it should
-		type_type_id = make_type(ws, INT_SIZE, Type_Primitive{"type_id"}, {}); create_declaration(ws.global_scope, "type_id", type_type_id);
+		type_type_id = make_type_distinct(ws, "type_id", type_int); create_declaration(ws.global_scope, "type_id", type_type_id);
 
-		type_untyped_int   = make_type(ws, 0, Type_Untyped{"untyped_int"  }, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_untyped_uint  = make_type(ws, 0, Type_Untyped{"untyped_uint" }, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_untyped_float = make_type(ws, 0, Type_Untyped{"untyped_float"}, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+		type_untyped_int   = make_type(ws, "untyped_int",   0, Type_Untyped{type_int},   Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_untyped_uint  = make_type(ws, "untyped_uint",  0, Type_Untyped{type_uint},  Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_untyped_float = make_type(ws, "untyped_float", 0, Type_Untyped{type_float}, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
 
 		constant_precedence_table[type_untyped_float] = 3;
 		constant_precedence_table[type_untyped_int]   = 2;
@@ -360,14 +363,6 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					type_mismatch(ltype, kind.rhs);
 					return .Error;
 				}
-
-
-				au : u64 = 4620130267728707584;
-				bu : u64 = 4615626668101337088;
-				a : f64 = transmute(f64)au;
-				b : f64 = transmute(f64)bu;
-
-				logln(a, b);
 
 				if is_untyped_type(ltype) || is_untyped_type(rtype) {
 					if is_untyped_type(ltype) && is_untyped_type(rtype) {
@@ -786,11 +781,15 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Return: {
 			assert(kind.procedure.signature_type != nil);
+			assert(kind.expr != nil);
 			return_type := kind.procedure.signature_type.kind.(Type_Proc).return_type;
 			expr_type := kind.expr.expr_type;
 			if !is_assignable_to(expr_type, return_type) {
 				type_mismatch(return_type, kind.expr);
 				return .Error;
+			}
+			if is_untyped_type(kind.expr.expr_type) {
+				convert_untyped_expression(kind.expr, return_type);
 			}
 			complete_node(node);
 			return .Ok;
@@ -922,26 +921,34 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 }
 
 convert_untyped_expression :: proc(node: ^Ast_Node, target_type: ^Type) {
+	switch kind in target_type.kind {
+		case Type_Untyped: {
+			convert_untyped_expression(node, kind.base);
+			return;
+		}
+	}
+
 	switch kind in node.constant_value {
+		case f64: {
+			switch target_kind in target_type.kind {
+				case Type_Float: {
+					// do nothing :D
+				}
+				case: panic(tprint(target_kind));
+			}
+		}
 		case i64: {
-			switch {
-				case is_float_type (target_type): node.constant_value = cast(f64)kind;
-				case is_signed_type(target_type): node.constant_value = cast(i64)kind;
-				case: panic(tprint(kind));
+			switch target_kind in target_type.kind {
+				case Type_Float:   node.constant_value = cast(f64)kind;
+				case Type_Integer: assert(target_kind.signed == true, tprint("Should never lower a signed int to an unsigned int"));
+				case: panic(tprint(target_kind));
 			}
 		}
 		case u64: {
-			switch {
-				case is_float_type   (target_type): node.constant_value = cast(f64)kind;
-				case is_signed_type  (target_type): node.constant_value = cast(i64)kind;
-				case is_unsigned_type(target_type): node.constant_value = cast(u64)kind;
-				case: panic(tprint(kind));
-			}
-		}
-		case f64: {
-			switch {
-				case is_float_type(target_type): node.constant_value = cast(f64)kind;
-				case: panic(tprint(kind));
+			switch target_kind in target_type.kind {
+				case Type_Float:   node.constant_value = cast(f64)kind;
+				case Type_Integer: if target_kind.signed do node.constant_value = cast(i64)kind;
+				case: panic(tprint(target_kind));
 			}
 		}
 		case: panic(tprint(kind));
@@ -950,12 +957,19 @@ convert_untyped_expression :: proc(node: ^Ast_Node, target_type: ^Type) {
 }
 
 solidify_untyped_type :: proc(node: ^Ast_Node) {
-	assert(is_untyped_type(node.expr_type));
-	switch {
-		case is_float_type   (node.expr_type): node.expr_type = type_float;
-		case is_signed_type  (node.expr_type): node.expr_type = type_int;
-		case is_unsigned_type(node.expr_type): node.expr_type = type_int;
-		case: panic(tprint(node.expr_type));
+	switch kind in node.expr_type.kind {
+		case Type_Untyped: {
+			switch untyped_kind in kind.base.kind {
+				case Type_Integer: {
+					node.expr_type = type_int;
+				}
+				case Type_Float: {
+					node.expr_type = type_int;
+				}
+				case: panic(tprint(untyped_kind));
+			}
+		}
+		case: panic(tprint("Expected untyped type, got:", node.expr_type));
 	}
 }
 
@@ -1085,9 +1099,10 @@ is_list_type :: proc(t: ^Type) -> bool {
 // note(josh): need some kind of system for this, 8 is just what the VM's alignment is so we'll use that for now
 TARGET_PLATFORM_ALIGNMENT :: 8;
 
-make_type :: proc(ws: ^Workspace, size: u64, derived: $T, flags: Type_Flags, loc := #caller_location) -> ^Type {
+make_type :: proc(ws: ^Workspace, name: string, size: u64, derived: $T, flags: Type_Flags, loc := #caller_location) -> ^Type {
 	new_type := new(Type);
 	new_type.id = cast(TypeID)len(ws.all_types)+1;
+	new_type.name = name;
 	new_type.size = size;
 	new_type.kind = derived;
 	new_type.flags = cast(u32)flags;
@@ -1131,7 +1146,7 @@ make_type_struct :: proc(ws: ^Workspace, name: string, fields: []Field) -> ^Type
 	}
 
 	assert(size != 0);
-	new_type := make_type(ws, size, Type_Struct{name, names[:], types[:], offsets[:]}, {});
+	new_type := make_type(ws, name, size, Type_Struct{names[:], types[:], offsets[:]}, {});
 	return new_type;
 }
 
@@ -1175,14 +1190,21 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 		}
 	}
 
+	name: strings.Builder;
+	sbprint(&name, "proc(");
 	params: [dynamic]Field;
 	for _, idx in declaration.params {
 		param := declaration.params[idx];
 		t := param.type;
+		sbprint(&name, t.name);
 		append(&params, Field{param.name, t});
 	}
+	sbprint(&name, ")");
+	if declaration.return_type != nil {
+		sbprint(&name, " ", declaration.return_type.name);;
+	}
 
-	new_type := make_type(ws, POINTER_SIZE, Type_Proc{params[:], declaration.return_type}, Type_Flags.Procedure);
+	new_type := make_type(ws, strings.to_string(name), POINTER_SIZE, Type_Proc{params[:], declaration.return_type}, Type_Flags.Procedure);
 	return new_type;
 }
 
@@ -1220,7 +1242,9 @@ get_or_make_type_ptr_to :: proc(using ws: ^Workspace, ptr_to: ^Type) -> ^Type {
 		}
 	}
 
-	type_ptr := make_type(ws, POINTER_SIZE, Type_Ptr{ptr_to}, Type_Flags.Pointer);
+	name: strings.Builder;
+	sbprint(&name, "^", ptr_to.name);
+	type_ptr := make_type(ws, strings.to_string(name), POINTER_SIZE, Type_Ptr{ptr_to}, Type_Flags.Pointer);
 	return type_ptr;
 }
 
@@ -1238,7 +1262,9 @@ get_or_make_type_array_of :: proc(using ws: ^Workspace, length: u64, array_of: ^
 		}
 	}
 
-	array_type := make_type(ws, array_of.size * length, Type_Array{length, array_of}, {});
+	name: strings.Builder;
+	sbprint(&name, "[", length, "]", array_of.name);
+	array_type := make_type(ws, strings.to_string(name), array_of.size * length, Type_Array{length, array_of}, {});
 	return array_type;
 }
 
@@ -1253,7 +1279,9 @@ get_or_make_type_list_of :: proc(using ws: ^Workspace, list_of: ^Type) -> ^Type 
 		}
 	}
 
-	array_type := make_type(ws, POINTER_SIZE + INT_SIZE, Type_List{list_of}, {}); // ptr + length
+	name: strings.Builder;
+	sbprint(&name, "[:]", list_of.name);
+	array_type := make_type(ws, strings.to_string(name), POINTER_SIZE + INT_SIZE, Type_List{list_of}, {}); // ptr + length
 	return array_type;
 }
 
@@ -1268,7 +1296,9 @@ get_or_make_type_slice_of :: proc(using ws: ^Workspace, slice_of: ^Type) -> ^Typ
 		}
 	}
 
-	type_slice := make_type(ws, SLICE_SIZE, Type_Slice{slice_of}, {});
+	name: strings.Builder;
+	sbprint(&name, "[]", slice_of.name);
+	type_slice := make_type(ws, strings.to_string(name), SLICE_SIZE, Type_Slice{slice_of}, {});
 	return type_slice;
 }
 
@@ -1320,45 +1350,46 @@ site_error :: proc(site_var: Site, args: ..any) {
 
 type_to_string :: proc(canonical_type: ^Type) -> string {
 	if canonical_type == nil do return "<nil>";
+	return canonical_type.name;
 
-	#complete
-	switch kind in canonical_type.kind {
-		case Type_Primitive: {
-			return kind.name;
-		}
-		case Type_Struct: {
-			return kind.name;
-		}
-		case Type_List: {
-			return aprint("[:]", type_to_string(kind.list_of));
-		}
-		case Type_Array: {
-			return aprint("[", kind.length, "]", type_to_string(kind.array_of));
-		}
-		case Type_Slice: {
-			return aprint("[]", type_to_string(kind.slice_of));
-		}
-		case Type_Ptr: {
-			return aprint("^", type_to_string(kind.ptr_to));
-		}
-		case Type_Proc: {
-			buf: strings.Builder;
-			sbprint(&buf, "proc(");
-			comma := "";
-			for param in kind.params {
-				assert(param.inferred_type != nil);
-				sbprint(&buf, comma, type_to_string(param.inferred_type));
-				comma = ", ";
-			}
-			sbprint(&buf, ")");
-			if kind.return_type != nil {
-				sbprint(&buf, " ", type_to_string(kind.return_type));
-			}
-			return strings.to_string(buf);
-		}
-		case Type_Untyped: {
-			return kind.name;
-		}
+	// #complete
+	// switch kind in canonical_type.kind {
+	// 	case Type_Primitive: {
+	// 		return kind.name;
+	// 	}
+	// 	case Type_Struct: {
+	// 		return kind.name;
+	// 	}
+	// 	case Type_List: {
+	// 		return aprint("[:]", type_to_string(kind.list_of));
+	// 	}
+	// 	case Type_Array: {
+	// 		return aprint("[", kind.length, "]", type_to_string(kind.array_of));
+	// 	}
+	// 	case Type_Slice: {
+	// 		return aprint("[]", type_to_string(kind.slice_of));
+	// 	}
+	// 	case Type_Ptr: {
+	// 		return aprint("^", type_to_string(kind.ptr_to));
+	// 	}
+	// 	case Type_Proc: {
+	// 		buf: strings.Builder;
+	// 		sbprint(&buf, "proc(");
+	// 		comma := "";
+	// 		for param in kind.params {
+	// 			assert(param.inferred_type != nil);
+	// 			sbprint(&buf, comma, type_to_string(param.inferred_type));
+	// 			comma = ", ";
+	// 		}
+	// 		sbprint(&buf, ")");
+	// 		if kind.return_type != nil {
+	// 			sbprint(&buf, " ", type_to_string(kind.return_type));
+	// 		}
+	// 		return strings.to_string(buf);
+	// 	}
+	// 	case Type_Untyped: {
+	// 		return kind.name;
+	// 	}
 
 		// @UnionTypes
 		// case Type_Union: {
@@ -1374,13 +1405,13 @@ type_to_string :: proc(canonical_type: ^Type) -> string {
 		// 	return strings.to_string(buf);
 		// }
 
-		case: {
-			unhandledcase(kind);
-		}
-	}
+	// 	case: {
+	// 		unhandledcase(kind);
+	// 	}
+	// }
 
-	unreachable();
-	return "";
+	// unreachable();
+	// return "";
 }
 
 unhandledcase :: proc(value: $T, loc := #caller_location) -> ! {

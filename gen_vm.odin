@@ -14,8 +14,8 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 	main_decl := try_find_declaration_in_block(ws.global_scope, "main");
 	assert(main_decl != nil);
 	main_proc := main_decl.kind.(Proc_Decl).procedure;
-	emit_procedure(ws, main_proc, true);
-	output("quit");
+	main_proc.is_main = true;
+	emit_procedure(ws, main_proc);
 
 	for procedure in ws.all_procedures {
 		if procedure == main_proc do continue;
@@ -24,7 +24,24 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 
 	println(strings.to_string(vm_code));
 
-	parse_and_execute(strings.to_string(vm_code));
+	vm: VM;
+	parse_and_execute(strings.to_string(vm_code), &vm);
+
+	if main_proc.return_type != nil {
+		switch kind in main_proc.return_type.kind {
+			case Type_Integer: {
+				if kind.signed {
+					switch main_proc.return_type.size {
+						case 1: logln("main returned: ", (cast(^i8 )&vm.memory[vm.registers[reg(.rsp)]-1])^);
+						case 2: logln("main returned: ", (cast(^i16)&vm.memory[vm.registers[reg(.rsp)]-2])^);
+						case 4: logln("main returned: ", (cast(^i32)&vm.memory[vm.registers[reg(.rsp)]-4])^);
+						case 8: logln("main returned: ", (cast(^i64)&vm.memory[vm.registers[reg(.rsp)]-8])^);
+					}
+				}
+			}
+			case: panic(tprint(kind));
+		}
+	}
 
 	// foo_decl := try_find_declaration_in_block(ws.global_scope, "foo");
 	// assert(foo_decl != nil);
@@ -42,47 +59,39 @@ output :: proc(pieces: ..any) {
 	sbprintln(&vm_code, ..pieces);
 }
 
-emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc, is_main := false) {
+emit_procedure :: proc(ws: ^Workspace, procedure: ^Ast_Proc) {
 	// frame_pointer := procedure.block.current_register;
 	// defer procedure.block.current_register = frame_pointer;
 	output(":", procedure.name);
 
-	if !is_main {
+	if !procedure.is_main {
 		procedure.return_address_reg = alloc_register(procedure, type_u64);
-		output("# return address");
-		output("pop", procedure.return_address_reg.reg, procedure.return_address_reg.type.size);
+		output("# save return address");
+		output("pop64u", procedure.return_address_reg.reg);
 	}
 
-	if len(procedure.params) > 0 {
-		for param in procedure.params {
-			param.offset_in_stack_frame = procedure.stack_frame_size;
-			procedure.stack_frame_size += param.type.size;
+	// calculate stack frame size
+	local_vars_stack_size: u64;
+	{
+		for var in procedure.variables {
+			procedure.stack_frame_size += var.type.size;
+			var.offset_in_stack_frame = procedure.stack_frame_size;
+			local_vars_stack_size += var.type.size;
 		}
-
-		output("movuim rim", procedure.stack_frame_size);
-		output("subu rsp rsp rim");
+		if len(procedure.params) > 0 {
+			for param in procedure.params {
+				procedure.stack_frame_size += param.type.size;
+				param.offset_in_stack_frame = procedure.stack_frame_size;
+			}
+		}
 	}
 
-	procedure.stack_pointer_reg = alloc_register(procedure, type_u64);
-	output("# frame pointer");
-	output("mov", procedure.stack_pointer_reg.reg, "rsp");
+	output("# allocate our stack frame");
+	output("adduim rsp rsp", local_vars_stack_size); // the params are already on the stack, so only add space for the locals
+	output("mov rfp rsp");
 
-	for var in procedure.variables {
-		var.offset_in_stack_frame = procedure.stack_frame_size;
-		procedure.stack_frame_size += var.type.size;
-	}
-
-	output("# stack frame size");
-	output("adduim rsp rsp", procedure.stack_frame_size);
 	emit_block(ws, procedure.block, procedure);
-	output("# restore frame pointer");
-	output("mov rsp", procedure.stack_pointer_reg.reg);
-	if !is_main {
-		return_reg := alloc_register(procedure, type_u64);
-		output("# jump to return address");
-		output("adduim", return_reg.reg, procedure.return_address_reg.reg, 1);
-		output("mov rip", return_reg.reg);
-	}
+	emit_return(procedure, nil);
 }
 
 emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc) {
@@ -111,12 +120,10 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc) {
 				output(":", jump_label);
 			}
 			case Ast_Return: {
-				unimplemented();
-				assert(procedure != nil);
-				// emit_return(ws, procedure, kind.expr);
+				emit_return(procedure, kind.expr);
 			}
 			case Ast_Call: {
-				emit_call(ws, kind, procedure);
+				emit_call(kind, procedure, false);
 			}
 			case Ast_Assign: {
 				emit_assign(ws, kind, procedure);
@@ -129,36 +136,164 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc) {
 	}
 }
 
-emit_call :: proc(ws: ^Workspace, ast_call: ^Ast_Call, procedure: ^Ast_Proc) {
-	output("# save registers");
-	for reg in procedure.registers_in_use {
-		output("push", reg.reg, reg.type.size);
+emit_return :: proc(procedure: ^Ast_Proc, return_expression: ^Ast_Node) {
+	result_reg: Register_Allocation;
+	if return_expression != nil {
+		output("# return expression");
+		result_reg = emit_expr(return_expression, procedure);
 	}
 
+	output("# pop our stack frame");
+	output("movuim rim", procedure.stack_frame_size);
+	output("subu rsp rsp rim");
+
+	if return_expression != nil {
+		output("# push return value");
+		push_register(result_reg);
+	}
+
+	if procedure.is_main {
+		output("quit");
+	}
+	else {
+		output("# jump to return address");
+		output("adduim", procedure.return_address_reg.reg, procedure.return_address_reg.reg, 1);
+		output("mov rip", procedure.return_address_reg.reg);
+	}
+}
+
+dynamic_array_from_mem :: proc(slice: $T/[]$E) -> [dynamic]E {
+	return transmute([dynamic]E)mem.Raw_Dynamic_Array{&slice[0], 0, len(slice), nil_allocator()};
+}
+
+emit_call :: proc(ast_call: ^Ast_Call, procedure: ^Ast_Proc, give_result: bool) -> (Register_Allocation, bool) {
+	saved_register_memory: [12]Register_Allocation;
+	saved_registers := dynamic_array_from_mem(saved_register_memory[:]);
+	output("# save registers");
+	for reg in procedure.registers_in_use {
+		push_register(reg);
+	}
+	assert(len(saved_registers) < cap(saved_registers));
+
+	//
+	output("# save our stack frame");
+	output("push64u rfp");
+
+	//
 	if len(ast_call.args) > 0 {
 		output("# push parameters");
 		for arg in ast_call.args {
 			assert(arg.expr_type != nil);
 			reg := emit_expr(arg, procedure);
-			output("push", reg.reg, reg.type.size);
+			push_register(reg);
 			free_register(procedure, reg);
 		}
 	}
 
-	// do the call
+	//
+	output("# save return address");
+	output("push64u rip");
+
+	//
 	proc_name := ast_call.procedure.derived.(Ast_Identifier).declaration.kind.(Proc_Decl).procedure.name;
-	output("# push return address");
-	output("push rip", 8);
 	output("# call", proc_name);
 	output("goto", proc_name);
 
-	// pop return values
+	// todo(josh): return values
+	result_reg: Register_Allocation;
+	has_result := false;
+	proc_type := ast_call.procedure.expr_type.kind.(Type_Proc);
+	if proc_type.return_type != nil {
+		if give_result {
+			has_result = true;
+			result_reg = alloc_register(procedure, proc_type.return_type);
+			output("# pop return value");
+			pop_register(result_reg);
+		}
+		else {
+			output("# discard return value");
+			pop_register(Register_Allocation{.rz, proc_type.return_type});
+		}
+	}
 
+	//
+	output("# restore our stack frame");
+	output("pop64u rfp");
 
-	output("# pop saved registers");
-	for i := len(procedure.registers_in_use)-1; i >= 0; i -= 1 {
-		reg := procedure.registers_in_use[i];
-		output("pop", reg.reg, reg.type.size);
+	output("# restore saved registers");
+	for i := len(saved_registers)-1; i >= 0; i -= 1 {
+		reg := saved_registers[i];
+		pop_register(reg);
+	}
+
+	return result_reg, has_result;
+}
+
+push_register :: proc(reg: Register_Allocation) {
+	assert(!is_untyped_type(reg.type));
+	switch kind in reg.type.kind {
+		case Type_Integer: {
+			if kind.signed {
+				switch reg.type.size {
+					case 1: output("push8s",  reg.reg);
+					case 2: output("push16s", reg.reg);
+					case 4: output("push32s", reg.reg);
+					case 8: output("push64s", reg.reg);
+					case: panic(tprint(reg.type.size));
+				}
+			}
+			else {
+				switch reg.type.size {
+					case 1: output("push8u",  reg.reg);
+					case 2: output("push16u", reg.reg);
+					case 4: output("push32u", reg.reg);
+					case 8: output("push64u", reg.reg);
+					case: panic(tprint(reg.type.size));
+				}
+			}
+		}
+		case Type_Float: {
+			switch reg.type.size {
+				case 4: output("push32f", reg.reg);
+				case 8: output("push64f", reg.reg);
+				case: panic(tprint(reg.type.size));
+			}
+		}
+		case: panic(tprint(reg.type.kind));
+	}
+}
+
+pop_register :: proc(reg: Register_Allocation) {
+	assert(!is_untyped_type(reg.type));
+	switch kind in reg.type.kind {
+		case Type_Integer: {
+			if kind.signed {
+				switch reg.type.size {
+					case 1: output("pop8s",  reg.reg);
+					case 2: output("pop16s", reg.reg);
+					case 4: output("pop32s", reg.reg);
+					case 8: output("pop64s", reg.reg);
+					case: panic(tprint(reg.type.size));
+				}
+			}
+			else {
+				switch reg.type.size {
+					case 1: output("pop8u",  reg.reg);
+					case 2: output("pop16u", reg.reg);
+					case 4: output("pop32u", reg.reg);
+					case 8: output("pop64u", reg.reg);
+					case: panic(tprint(reg.type.size));
+				}
+			}
+		}
+		case Type_Float: {
+			switch reg.type.size {
+				case 4: output("pop32f", reg.reg);
+				case 8: output("pop64f", reg.reg);
+				case: panic(tprint(reg.type.size));
+			}
+		}
+		case: panic(tprint(reg.type.kind));
 	}
 }
 
@@ -385,8 +520,13 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 		}
 
 		case Ast_Call: {
-			unimplemented();
-			// emit_call(kind, &result_register);
+			proc_type, ok := kind.procedure.expr_type.kind.(Type_Proc);
+			assert(ok);
+			assert(proc_type.return_type != nil); // if we ended up in emit_expr() with a proc call then it should have a return value
+
+			result, has_result := emit_call(kind, procedure, true);
+			assert(has_result);
+			return result;
 		}
 
 		case Ast_Selector: {
@@ -404,7 +544,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 mov_var_to_reg :: proc(var: ^Ast_Var, reg: Register_Allocation, procedure: ^Ast_Proc) {
 	if var.is_local	{
 		address_reg := alloc_register(procedure, type_u64);
-		output("adduim", address_reg.reg, procedure.stack_pointer_reg.reg, var.offset_in_stack_frame);
+		output("addsim", address_reg.reg, "rfp", -cast(i64)var.offset_in_stack_frame);
 		defer free_register(procedure, address_reg);
 
 		switch {
@@ -446,7 +586,7 @@ mov_var_to_reg :: proc(var: ^Ast_Var, reg: Register_Allocation, procedure: ^Ast_
 mov_reg_to_var :: proc(reg: Register_Allocation, var: ^Ast_Var, procedure: ^Ast_Proc) {
 	if var.is_local	{
 		address_reg := alloc_register(procedure, type_u64);
-		output("adduim", address_reg.reg, procedure.stack_pointer_reg.reg, var.offset_in_stack_frame);
+		output("addsim", address_reg.reg, "rfp", -cast(i64)var.offset_in_stack_frame);
 		defer free_register(procedure, address_reg);
 
 		switch {

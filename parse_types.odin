@@ -81,8 +81,10 @@ Ast_Proc :: struct {
 
 	stack_frame_size: u64,
 	return_address_reg: Register_Allocation,
-	stack_pointer_reg:  Register_Allocation,
+	caller_frame_pointer_reg: Register_Allocation,
 	registers_in_use: [dynamic]Register_Allocation,
+
+	is_main: bool,
 }
 
 Ast_Var :: struct {

@@ -18,7 +18,7 @@ Type_Slice :: struct {
 }
 
 Type_Untyped :: struct {
-	name: string,
+	base: ^Type,
 }
 
 // @UnionTypes
@@ -31,8 +31,16 @@ Field :: struct {
 	inferred_type: ^Type,
 }
 
-Type_Primitive :: struct {
-	name: string,
+Type_Integer :: struct {
+	signed: bool,
+}
+
+Type_Float :: struct {
+
+}
+
+Type_Bool :: struct {
+
 }
 
 Type_Proc :: struct {
@@ -41,7 +49,6 @@ Type_Proc :: struct {
 }
 
 Type_Struct :: struct {
-	name: string,
 	fields: []string,
 	types: []^Type,
 	offsets: []u64, // note(josh): in bytes
@@ -49,7 +56,9 @@ Type_Struct :: struct {
 
 Type :: struct {
 	kind: union {
-		Type_Primitive,
+		Type_Integer,
+		Type_Float,
+		Type_Bool,
 		Type_Struct,
 		Type_Ptr,
 		Type_Array,
@@ -63,6 +72,7 @@ Type :: struct {
 		Type_Proc,
 	},
 	id:    TypeID,
+	name: string,
 	size:  u64,
 	flags: u32,
 
