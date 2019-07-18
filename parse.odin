@@ -20,7 +20,8 @@ parse_file :: proc(ws: ^Workspace, filename: string, scope: ^Ast_Block = nil) ->
 	return true;
 }
 
-parse_text :: proc(ws: ^Workspace, text: string, scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
+parse_text :: proc(ws: ^Workspace, text: string, _scope: ^Ast_Block, filename := "<none>", loc := #caller_location) {
+	scope := _scope;
 	if scope == nil {
 		assert(ws.global_scope == nil);
 		ws.global_scope = node(ws, Token{}, Ast_Block{{}, nil, nil});
@@ -57,10 +58,11 @@ parse_stmt_list :: proc(ws: ^Workspace) {
 }
 
 
-_alloc_node :: inline proc(ws: ^Workspace, token: Token, derived: $T, loc := #caller_location) -> ^T {
+_alloc_node :: inline proc(ws: ^Workspace, token: Token, _derived: $T, loc := #caller_location) -> ^T {
 	@static last_serial: int;
-
 	last_serial += 1;
+
+	derived := _derived;
 
 	ptr := new(Ast_Node);
 	derived.base = ptr;

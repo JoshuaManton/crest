@@ -447,6 +447,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(type_int, kind.index);
 				return .Error;
 			}
+			convert_untyped_expression(kind.index, type_int);
 
 			left := kind.left.expr_type;
 			t := (&left.kind.(Type_Array)).array_of;
@@ -634,6 +635,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					type_mismatch(param.inferred_type, arg);
 					return .Error;
 				}
+				convert_untyped_expression(arg, param.inferred_type);
 			}
 
 			complete_expr(node, proc_type.return_type, true);
@@ -727,6 +729,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
+			convert_untyped_expression(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
@@ -736,6 +739,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
+			convert_untyped_expression(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
@@ -745,27 +749,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
+			convert_untyped_expression(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
-
-		// case Ast_For_Each: {
-		// 	assert(kind.array.expr_type != nil);
-		// 	assert(kind.var.base.check_state == .Checked);
-
-		// 	array_expr_type := kind.array.expr_type;
-		// 	if !is_slice_type(array_expr_type) && !is_array_type(array_expr_type) && !is_list_type(array_expr_type) {
-		// 		error(kind.array, "Cannot iterate over type: ", type_to_string(array_expr_type));
-		// 		return .Error;
-		// 	}
-
-		// 	array_of := get_base_type(kind.array.expr_type);
-		// 	if array_of !=
-		// 	if is_assignable_to()
-		// 	ensure_types_match(t, kind.var.base, kind.var.base);
-		// 	complete_node(node);
-		// 	return .Ok;
-		// }
 
 		case Ast_Assign: {
 			assert(kind.left.expr_type != nil);
@@ -775,6 +762,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(kind.left.expr_type, kind.right);
 				return .Error;
 			}
+			convert_untyped_expression(kind.right, kind.left.expr_type);
 			complete_node(node);
 			return .Ok;
 		}
@@ -788,9 +776,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				type_mismatch(return_type, kind.expr);
 				return .Error;
 			}
-			if is_untyped_type(kind.expr.expr_type) {
-				convert_untyped_expression(kind.expr, return_type);
-			}
+			convert_untyped_expression(kind.expr, return_type);
 			complete_node(node);
 			return .Ok;
 		}
@@ -921,6 +907,10 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 }
 
 convert_untyped_expression :: proc(node: ^Ast_Node, target_type: ^Type) {
+	if node.constant_value == nil { // not sure about letting things get in here if they aren't untyped, maybe it's fine
+		return;
+	}
+
 	switch kind in target_type.kind {
 		case Type_Untyped: {
 			convert_untyped_expression(node, kind.base);

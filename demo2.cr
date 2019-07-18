@@ -1,9 +1,10 @@
-proc main() int {
-	var a = 12 * 2;
-	var b = foo(a);
-	return b;
+proc main(arg: i16) i16 {
+	return factorial(arg);
 }
 
-proc foo(a: int) int {
-	return a + a;
+proc factorial(n: i16) i16 {
+	if n == 1 {
+		return 1;
+	}
+	return n * factorial(n-1);
 }

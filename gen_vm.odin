@@ -32,10 +32,10 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 			case Type_Integer: {
 				if kind.signed {
 					switch main_proc.return_type.size {
-						case 1: logln("main returned: ", (cast(^i8 )&vm.memory[vm.registers[reg(.rsp)]-1])^);
-						case 2: logln("main returned: ", (cast(^i16)&vm.memory[vm.registers[reg(.rsp)]-2])^);
-						case 4: logln("main returned: ", (cast(^i32)&vm.memory[vm.registers[reg(.rsp)]-4])^);
-						case 8: logln("main returned: ", (cast(^i64)&vm.memory[vm.registers[reg(.rsp)]-8])^);
+						case 1: println((cast(^i8 )&vm.memory[vm.registers[reg(.rsp)]-1])^);
+						case 2: println((cast(^i16)&vm.memory[vm.registers[reg(.rsp)]-2])^);
+						case 4: println((cast(^i32)&vm.memory[vm.registers[reg(.rsp)]-4])^);
+						case 8: println((cast(^i64)&vm.memory[vm.registers[reg(.rsp)]-8])^);
 					}
 				}
 			}
@@ -101,7 +101,7 @@ emit_block :: proc(ws: ^Workspace, block: ^Ast_Block, procedure: ^Ast_Proc) {
 			continue;
 		}
 
-		output("#", stmt.root_token.site);
+		output("\n#", stmt.root_token.site);
 		switch kind in &stmt.derived {
 			case Ast_Var: {
 				if kind.expr != nil {
@@ -172,6 +172,7 @@ emit_call :: proc(ast_call: ^Ast_Call, procedure: ^Ast_Proc, give_result: bool) 
 	output("# save registers");
 	for reg in procedure.registers_in_use {
 		push_register(reg);
+		append(&saved_registers, reg);
 	}
 	assert(len(saved_registers) < cap(saved_registers));
 
@@ -359,19 +360,20 @@ get_field_idx :: proc(type: ^Type_Struct, name: string) -> int {
 }
 
 emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation {
+	assert(!is_untyped_type(expr.expr_type), tprint(expr.derived));
 	if expr.constant_value != nil {
 		reg: Register_Allocation;
 		switch kind in expr.constant_value {
 			case i64: {
-				reg = alloc_register(procedure, type_i64);
+				reg = alloc_register(procedure, expr.expr_type);
 				output("movsim", reg.reg, kind);
 			}
 			case u64: {
-				reg = alloc_register(procedure, type_u64);
+				reg = alloc_register(procedure, expr.expr_type);
 				output("movuim", reg.reg, kind);
 			}
 			case f64: {
-				reg = alloc_register(procedure, type_f64);
+				reg = alloc_register(procedure, expr.expr_type);
 				output("movfim", reg.reg, transmute(u64)kind);
 			}
 			case: panic(tprint(kind));
@@ -379,7 +381,6 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 		return reg;
 	}
 
-	assert(!is_untyped_type(expr.expr_type), tprint(expr.derived));
 	switch kind in &expr.derived {
 		case Ast_Number: {
 			switch number_kind in kind.base.constant_value {
