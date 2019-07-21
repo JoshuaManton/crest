@@ -200,7 +200,7 @@ emit_call :: proc(ast_call: ^Ast_Call, procedure: ^Ast_Proc, give_result: bool) 
 	output("# call", proc_name);
 	output("goto", proc_name);
 
-	// todo(josh): return values
+	//
 	result_reg: Register_Allocation;
 	has_result := false;
 	proc_type := ast_call.procedure.expr_type.kind.(Type_Proc);
@@ -548,29 +548,31 @@ mov_var_to_reg :: proc(var: ^Ast_Var, reg: Register_Allocation, procedure: ^Ast_
 		output("addsim", address_reg.reg, "rfp", -cast(i64)var.offset_in_stack_frame);
 		defer free_register(procedure, address_reg);
 
-		switch {
-			case is_float_type(var.type): {
+		switch kind in var.type.kind {
+			case Type_Integer: {
+				if kind.signed {
+					switch var.type.size {
+						case 1: output("ld8s",  reg.reg, address_reg.reg);
+						case 2: output("ld16s", reg.reg, address_reg.reg);
+						case 4: output("ld32s", reg.reg, address_reg.reg);
+						case 8: output("ld64s", reg.reg, address_reg.reg);
+						case: panic(tprint(var.type.size));
+					}
+				}
+				else {
+					switch var.type.size {
+						case 1: output("ld8u",  reg.reg, address_reg.reg);
+						case 2: output("ld16u", reg.reg, address_reg.reg);
+						case 4: output("ld32u", reg.reg, address_reg.reg);
+						case 8: output("ld64u", reg.reg, address_reg.reg);
+						case: panic(tprint(var.type.size));
+					}
+				}
+			}
+			case Type_Float: {
 				switch var.type.size {
 					case 4: output("ld32f", reg.reg, address_reg.reg);
 					case 8: output("ld64f", reg.reg, address_reg.reg);
-					case: panic(tprint(var.type.size));
-				}
-			}
-			case is_integer_type(var.type) && is_signed_type(var.type): {
-				switch var.type.size {
-					case 1: output("ld8s",  reg.reg, address_reg.reg);
-					case 2: output("ld16s", reg.reg, address_reg.reg);
-					case 4: output("ld32s", reg.reg, address_reg.reg);
-					case 8: output("ld64s", reg.reg, address_reg.reg);
-					case: panic(tprint(var.type.size));
-				}
-			}
-			case is_integer_type(var.type) && is_unsigned_type(var.type): {
-				switch var.type.size {
-					case 1: output("ld8u",  reg.reg, address_reg.reg);
-					case 2: output("ld16u", reg.reg, address_reg.reg);
-					case 4: output("ld32u", reg.reg, address_reg.reg);
-					case 8: output("ld64u", reg.reg, address_reg.reg);
 					case: panic(tprint(var.type.size));
 				}
 			}
@@ -590,29 +592,31 @@ mov_reg_to_var :: proc(reg: Register_Allocation, var: ^Ast_Var, procedure: ^Ast_
 		output("addsim", address_reg.reg, "rfp", -cast(i64)var.offset_in_stack_frame);
 		defer free_register(procedure, address_reg);
 
-		switch {
-			case is_float_type(var.type): {
+		switch kind in var.type.kind {
+			case Type_Integer: {
+				if kind.signed {
+					switch var.type.size {
+						case 1: output("sv8s",  address_reg.reg, reg.reg);
+						case 2: output("sv16s", address_reg.reg, reg.reg);
+						case 4: output("sv32s", address_reg.reg, reg.reg);
+						case 8: output("sv64s", address_reg.reg, reg.reg);
+						case: panic(tprint(var.type.size));
+					}
+				}
+				else {
+					switch var.type.size {
+						case 1: output("sv8u",  address_reg.reg, reg.reg);
+						case 2: output("sv16u", address_reg.reg, reg.reg);
+						case 4: output("sv32u", address_reg.reg, reg.reg);
+						case 8: output("sv64u", address_reg.reg, reg.reg);
+						case: panic(tprint(var.type.size));
+					}
+				}
+			}
+			case Type_Float: {
 				switch var.type.size {
 					case 4: output("sv32f", address_reg.reg, reg.reg);
 					case 8: output("sv64f", address_reg.reg, reg.reg);
-					case: panic(tprint(var.type.size));
-				}
-			}
-			case is_integer_type(var.type) && is_signed_type(var.type): {
-				switch var.type.size {
-					case 1: output("sv8s",  address_reg.reg, reg.reg);
-					case 2: output("sv16s", address_reg.reg, reg.reg);
-					case 4: output("sv32s", address_reg.reg, reg.reg);
-					case 8: output("sv64s", address_reg.reg, reg.reg);
-					case: panic(tprint(var.type.size));
-				}
-			}
-			case is_integer_type(var.type) && is_unsigned_type(var.type): {
-				switch var.type.size {
-					case 1: output("sv8u",  address_reg.reg, reg.reg);
-					case 2: output("sv16u", address_reg.reg, reg.reg);
-					case 4: output("sv32u", address_reg.reg, reg.reg);
-					case 8: output("sv64u", address_reg.reg, reg.reg);
 					case: panic(tprint(var.type.size));
 				}
 			}

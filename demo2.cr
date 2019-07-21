@@ -1,5 +1,5 @@
-proc main(arg: i16) i16 {
-	return factorial(arg);
+proc main() i16 {
+	return factorial(6);
 }
 
 proc factorial(n: i16) i16 {

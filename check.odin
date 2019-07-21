@@ -720,6 +720,8 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Paren: {
 			assert(kind.nested_expr.expr_type != nil);
+			node.constant_value = kind.nested_expr.constant_value;
+			complete_expr(node, kind.nested_expr.expr_type);
 			complete_node(node);
 			return .Ok;
 		}
@@ -965,28 +967,9 @@ solidify_untyped_type :: proc(node: ^Ast_Node) {
 
 
 
-// get_result_type :: proc(lhs: ^Type, rhs: ^Type) -> ^Type {
-// 	if lhs == nil && rhs != nil do return nil;
-// 	if lhs != nil && rhs == nil do return nil;
-
-// 	if lhs == rhs do return lhs;
-
-// 	if is_untyped_type(lhs) do return rhs;
-
-// 	return lhs;
-// }
-
 type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) {
 	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.expr_type));
 }
-
-// ensure_types_match :: proc(wanted: ^Type, given: ^Ast_Node, error_node: ^Ast_Node, loc := #caller_location) -> bool {
-// 	if !types_match(wanted, given.expr_type, loc) {
-// 		type_mismatch(wanted, given, error_node, loc);
-// 		return false;
-// 	}
-// 	return true;
-// }
 
 is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location) -> bool {
 	//
@@ -1082,7 +1065,6 @@ is_list_type :: proc(t: ^Type) -> bool {
 	}
 	return false;
 }
-
 
 
 
@@ -1331,198 +1313,11 @@ site_error :: proc(site_var: Site, args: ..any) {
 
 
 
-
-
-
-
-
-
-
 type_to_string :: proc(canonical_type: ^Type) -> string {
 	if canonical_type == nil do return "<nil>";
 	return canonical_type.name;
-
-	// #complete
-	// switch kind in canonical_type.kind {
-	// 	case Type_Primitive: {
-	// 		return kind.name;
-	// 	}
-	// 	case Type_Struct: {
-	// 		return kind.name;
-	// 	}
-	// 	case Type_List: {
-	// 		return aprint("[:]", type_to_string(kind.list_of));
-	// 	}
-	// 	case Type_Array: {
-	// 		return aprint("[", kind.length, "]", type_to_string(kind.array_of));
-	// 	}
-	// 	case Type_Slice: {
-	// 		return aprint("[]", type_to_string(kind.slice_of));
-	// 	}
-	// 	case Type_Ptr: {
-	// 		return aprint("^", type_to_string(kind.ptr_to));
-	// 	}
-	// 	case Type_Proc: {
-	// 		buf: strings.Builder;
-	// 		sbprint(&buf, "proc(");
-	// 		comma := "";
-	// 		for param in kind.params {
-	// 			assert(param.inferred_type != nil);
-	// 			sbprint(&buf, comma, type_to_string(param.inferred_type));
-	// 			comma = ", ";
-	// 		}
-	// 		sbprint(&buf, ")");
-	// 		if kind.return_type != nil {
-	// 			sbprint(&buf, " ", type_to_string(kind.return_type));
-	// 		}
-	// 		return strings.to_string(buf);
-	// 	}
-	// 	case Type_Untyped: {
-	// 		return kind.name;
-	// 	}
-
-		// @UnionTypes
-		// case Type_Union: {
-		// 	buf: strings.Builder;
-		// 	sbprint(&buf, "union {");
-		// 	comma := "";
-		// 	for canonical_type in kind.types {
-		// 		sbprint(&buf, comma, type_to_string(canonical_type));
-		// 		comma = ", ";
-		// 	}
-
-		// 	sbprint(&buf, "}");
-		// 	return strings.to_string(buf);
-		// }
-
-	// 	case: {
-	// 		unhandledcase(kind);
-	// 	}
-	// }
-
-	// unreachable();
-	// return "";
 }
 
 unhandledcase :: proc(value: $T, loc := #caller_location) -> ! {
 	panic(tprint("Unhandled case at ", pretty_location(loc), ": ", value));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// value := evaluate_constant_value(kind.op, kind.lhs.constant_value, kind.rhs.constant_value);
-				// assert(value != nil); // nil means the types didn't match we shouldn't have gotten this far if that is true
-				// node.constant_value = value;
-
-				// evaluate_constant_value :: proc(op: , a, b: Constant_Value) -> Constant_Value {
-				// 	assert(a != nil);
-				// 	assert(b != nil);
-
-				// 	// we can assume the types of a and b match
-
-				// 	value: Constant_Value;
-
-				// 	#complete
-				// 	switch lhs in a {
-				// 	case TypeID: {
-				// 		rhs := b.(TypeID);
-				// 		switch op {
-				// 			case .Equal:         value = lhs == rhs;
-				// 			case .Not_Equal:     value = lhs != rhs;
-				// 			case: unhandledcase(op);
-				// 		}
-				// 	}
-				// 	case string: {
-				// 		rhs := b.(string);
-				// 		switch op {
-				// 			case .Plus:          value = aprint(lhs, rhs);
-				// 			case .Equal:         value = lhs == rhs;
-				// 			case .Not_Equal:     value = lhs != rhs;
-
-				// 			// todo(josh): these cases compile but I have no idea what they do
-				// 			// case .Less:          value = lhs < rhs;
-				// 			// case .Greater:       value = lhs > rhs;
-				// 			// case .Less_Equal:    value = lhs <= rhs;
-				// 			// case .Greater_Equal: value = lhs >= rhs;
-
-				// 			case: unhandledcase(op);
-				// 		}
-				// 	}
-				// 	case bool: {
-				// 		rhs := b.(bool);
-				// 		switch op {
-				// 			case .Equal:         value = lhs == rhs;
-				// 			case .Not_Equal:     value = lhs != rhs;
-				// 			case .And_And:       value = lhs && rhs;
-				// 			case .Or_Or:         value = lhs || rhs;
-				// 			case: unhandledcase(op);
-				// 		}
-				// 	}
-				// 	case f64: {
-				// 		rhs := b.(f64);
-				// 		switch op {
-				// 			case .Plus:          value = lhs + rhs;
-				// 			case .Minus:         value = lhs - rhs;
-				// 			case .Multiply:      value = lhs * rhs;
-				// 			case .Divide:        value = lhs / rhs;
-				// 			case .Equal:         value = lhs == rhs;
-				// 			case .Not_Equal:     value = lhs != rhs;
-				// 			case .Less:          value = lhs < rhs;
-				// 			case .Greater:       value = lhs > rhs;
-				// 			case .Less_Equal:    value = lhs <= rhs;
-				// 			case .Greater_Equal: value = lhs >= rhs;
-				// 			case: unhandledcase(op);
-				// 		}
-				// 	}
-				// 	case i64: {
-				// 		rhs := b.(i64);
-				// 		switch op {
-				// 		case .Plus:     value = lhs + rhs;
-				// 		case .Minus:    value = lhs - rhs;
-				// 		case .Multiply: value = lhs * rhs;
-				// 		case .Divide:   value = lhs / rhs;
-				// 		case .Mod:      value = lhs % rhs;
-				// 		case .Mod_Mod:  value = lhs %% rhs;
-				// 		case .And:      value = lhs & rhs;
-				// 		case .Or:       value = lhs | rhs;
-				// 		case .Xor:      value = lhs ~ rhs;
-				// 		case .LShift:   {
-				// 			if rhs < 0 {
-				// 				// todo(josh): error handling
-				// 				logln("Shift amount must be an unsigned integer.");
-				// 				return nil;
-				// 			}
-				// 			value = lhs << cast(u64)rhs;
-				// 		}
-				// 		case .RShift:   {
-				// 			if rhs < 0 {
-				// 				// todo(josh): error handling
-				// 				logln("Shift amount must be an unsigned integer.");
-				// 				return nil;
-				// 			}
-				// 			value = lhs >> cast(u64)rhs;
-				// 		}
-				// 		case .Equal:         value = lhs == rhs;
-				// 		case .Not_Equal:     value = lhs != rhs;
-				// 		case .Less:          value = lhs < rhs;
-				// 		case .Greater:       value = lhs > rhs;
-				// 		case .Less_Equal:    value = lhs <= rhs;
-				// 		case .Greater_Equal: value = lhs >= rhs;
-				// 		case: unhandledcase(op);
-				// 		}
-				// 	}
-				// 	}
-
-				// 	return value;
-				// }
