@@ -258,106 +258,85 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 	switch kind in &node.derived {
 		case Ast_Number: {
 			t: ^Type;
+			cv: Constant_Value;
 			if kind.has_a_dot {
 				t = type_untyped_float;
-				node.constant_value = kind.float_value;
+				cv = kind.float_value;
 			}
 			else {
 				t = type_untyped_uint;
-				node.constant_value = kind.uint_value;
+				cv = kind.uint_value;
 			}
-			complete_expr(node, t);
+			complete_expr(node, Expr_Data{t, .Constant, cv});
 			return .Ok;
 		}
 
 		case Ast_String: {
-			node.constant_value = kind.text;
-			complete_expr(node, type_string);
+			complete_expr(node, Expr_Data{type_string, .Constant, kind.text});
 			return .Ok;
 		}
 
 		case Ast_Unary: {
-			// todo(josh): this is probably severely incomplete
-			assert(kind.rhs.expr_type != nil);
-
-			rhs_type := kind.rhs.expr_type;
-			result_type: ^Type;
+			rhs_data := kind.rhs.expr_data;
 			switch kind.op {
 				case .Dereference: {
-					ptr, ok := kind.rhs.expr_type.kind.(Type_Ptr);
+					ptr, ok := rhs_data.type.kind.(Type_Ptr);
 					if !ok {
-						error(node, "Cannot dereference a non-pointer type ", type_to_string(rhs_type));
+						error(node, "Cannot dereference a non-pointer type ", type_to_string(rhs_data.type));
 						return .Error;
 					}
-					result_type = ptr.ptr_to;
+					complete_expr(node, Expr_Data{ptr.ptr_to, .LValue, {}});
+					return .Ok;
 				}
-				case .Address: { // take address
-					result_type = get_or_make_type_ptr_to(ws, rhs_type);
+				case .Address: {
+					complete_expr(node, Expr_Data{get_or_make_type_ptr_to(ws, rhs_data.type), .RValue, {}});
+					return .Ok;
 				}
 				case: {
-					info, ok := type_get_unary_operator(rhs_type, kind.op);
+					info, ok := type_get_unary_operator(rhs_data.type, kind.op);
 					if !ok {
-						error(node, "Type ", type_to_string(rhs_type), " doesn't have unary operator ", kind.op);
+						error(node, "Type ", type_to_string(rhs_data.type), " doesn't have unary operator ", kind.op);
 						return .Error;
 					}
 
-					result_type = info.result_type;
-					if kind.rhs.constant_value != nil {
-						assert(info.constant_evaluation_procedure != nil);
-						kind.constant_value = info.constant_evaluation_procedure(kind.rhs.constant_value);
+					if info.constant_evaluation_procedure != nil && rhs_data.constant_value != nil {
+						cv := info.constant_evaluation_procedure(rhs_data.constant_value);
+						complete_expr(node, Expr_Data{info.result_type, .Constant, cv});
+						return .Ok;
 					}
+
+					complete_expr(node, Expr_Data{info.result_type, .RValue, {}});
+					return .Ok;
 				}
 			}
-			assert(result_type != nil);
-
-			// switch kind.op {
-				// case .Boolean_Not: {
-				// 	if rhs_type != type_bool {
-				// 		error(node, "Unary operator `!` is only valid for type `bool`. Given: ", type_to_string(rhs_type));
-				// 		return .Error;
-				// 	}
-				// 	if kind.rhs.constant_value != nil {
-				// 		node.constant_value = !kind.rhs.constant_value.(bool);
-				// 	}
-				// }
-				// case .Plus: {
-				// 	if !is_numeric_type(rhs_type) {
-				// 		error(node, "Unary operator `+` is only valid for numeric types. Given: ", type_to_string(rhs_type));
-				// 		return .Error;
-				// 	}
-				// 	// unary `+` doesn't actually do anything
-				// }
-				// case .Minus: {
-				// 	if !is_numeric_type(rhs_type) {
-				// 		error(node, "Unary operator `-` is only valid for numeric types. Given: ", type_to_string(rhs_type));
-				// 		return .Error;
-				// 	}
-
-				// 	if kind.rhs.constant_value != nil {
-				// 		switch constant_kind in kind.rhs.constant_value {
-				// 			case i64: node.constant_value = -constant_kind;
-				// 			case u64: node.constant_value = -cast(i64)constant_kind;
-				// 			case f64: node.constant_value = -constant_kind;
-				// 			case:     assert(false, tprint(constant_kind));
-				// 		}
-				// 	}
-				// }
-
-				// case: {
-					// logln(site(node.root_token.site));
-					// unhandledcase(kind.op);
-				// }
-			// }
-
-			complete_expr(node, result_type);
-			return .Ok;
+			unreachable();
+			return .Error;
 		}
 
 		case Ast_Binary: {
+			is_valid_rvalue :: proc(node: ^Ast_Node) -> bool {
+				switch node.expr_data.mode {
+					case .LValue: return true;
+					case .RValue: return true;
+					case .Constant: return true;
+					case: return false;
+				}
+			}
+			if !is_valid_rvalue(kind.lhs) {
+				error(kind.lhs, "Not a valid rvalue.");
+				println(kind.lhs);
+				return .Error;
+			}
+			if !is_valid_rvalue(kind.rhs) {
+				error(kind.rhs, "Not a valid rvalue.");
+				println(kind.rhs);
+				return .Error;
+			}
+
 			common_type: ^Type;
 			{
-				ltype := kind.lhs.expr_type;
-				rtype := kind.rhs.expr_type;
+				ltype := kind.lhs.expr_data.type;
+				rtype := kind.rhs.expr_data.type;
 
 				if !is_assignable_to(rtype, ltype) {
 					type_mismatch(ltype, kind.rhs);
@@ -370,11 +349,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 						rrank, ok2 := constant_precedence_table[rtype]; assert(ok2);
 						if lrank > rrank {
 							common_type = ltype;
-							convert_untyped_expression(kind.rhs, common_type);
+							convert_if_untyped(kind.rhs, common_type);
 						}
 						else if rrank > lrank {
 							common_type = rtype;
-							convert_untyped_expression(kind.lhs, common_type);
+							convert_if_untyped(kind.lhs, common_type);
 						}
 						else {
 							assert(ltype == rtype);
@@ -383,12 +362,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					}
 					else if is_untyped_type(ltype) {
 						common_type = rtype;
-						convert_untyped_expression(kind.lhs, common_type);
+						convert_if_untyped(kind.lhs, common_type);
 					}
 					else {
 						assert(is_untyped_type(rtype));
 						common_type = ltype;
-						convert_untyped_expression(kind.rhs, common_type);
+						convert_if_untyped(kind.rhs, common_type);
 					}
 				}
 				else {
@@ -404,12 +383,14 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				return .Error;
 			}
 
-			both_constant := kind.lhs.constant_value != nil && kind.rhs.constant_value != nil;
-			if both_constant {
+			cv: Constant_Value;
+			if kind.lhs.expr_data.mode == .Constant && kind.rhs.expr_data.mode == .Constant {
 				assert(operator_info.constant_evaluation_procedure != nil);
-				result := operator_info.constant_evaluation_procedure(kind.lhs.constant_value, kind.rhs.constant_value);
+				assert(kind.lhs.expr_data.constant_value != nil);
+				assert(kind.rhs.expr_data.constant_value != nil);
+				result := operator_info.constant_evaluation_procedure(kind.lhs.expr_data.constant_value, kind.rhs.expr_data.constant_value);
 				assert(result != nil);
-				node.constant_value = result;
+				cv = result;
 			}
 			else {
 				if operator_info.constant_only {
@@ -417,13 +398,13 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				}
 			}
 
-			complete_expr(node, operator_info.result_type);
+			complete_expr(node, Expr_Data{operator_info.result_type, cv == nil ? .RValue : .Constant, cv});
 			return .Ok;
 		}
 
 		case Ast_Selector: {
-			assert(kind.left.expr_type != nil);
-			left := kind.left.expr_type;
+			assert(kind.lhs.expr_data.type != nil);
+			left := kind.lhs.expr_data.type;
 			left_struct, ok := left.kind.(Type_Struct);
 			if !ok {
 				error(node, "Selector only works for struct types right now.");
@@ -431,7 +412,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 			for field, field_idx in left_struct.fields {
 				if field == kind.field {
-					complete_expr(node, left_struct.types[field_idx]);
+					complete_expr(node, Expr_Data{left_struct.types[field_idx], .LValue, {}});
 					return .Ok;
 				}
 			}
@@ -441,24 +422,26 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Subscript: {
-			assert(kind.left.expr_type != nil);
-			assert(kind.index.expr_type != nil);
-			if !is_assignable_to(kind.index.expr_type, type_int) {
+			// todo(josh): Constant_Values for subscripts?
+
+			assert(kind.lhs.expr_data.type != nil);
+			assert(kind.index.expr_data.type != nil);
+			if !is_assignable_to(kind.index.expr_data.type, type_int) {
 				type_mismatch(type_int, kind.index);
 				return .Error;
 			}
-			convert_untyped_expression(kind.index, type_int);
+			convert_if_untyped(kind.index, type_int);
 
-			left := kind.left.expr_type;
-			t := (&left.kind.(Type_Array)).array_of;
-			complete_expr(node, t);
+			left := kind.lhs.expr_data.type;
+			t := (&left.kind.(Type_Array)).array_of; // todo(josh): @ErrorHandling
+			complete_expr(node, Expr_Data{t, .LValue, {}});
 			return .Ok;
 		}
 
 		case Ast_Cast: {
-			target := get_type(ws, kind.typespec.base.constant_value.(TypeID));
+			target_type := get_type(ws, kind.typespec.base.expr_data.constant_value.(TypeID));
 			// todo: check if valid cast (can't cast string to int, for example)
-			complete_expr(node, target);
+			complete_expr(node, Expr_Data{target_type, .RValue, target_type.id});
 			return .Ok;
 		}
 
@@ -470,31 +453,35 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			}
 
 			#complete
-			switch decl_type in kind.declaration.kind {
+			switch decl in kind.declaration.kind {
 				case Type_Decl: {
-					assert(decl_type.type.id != 0);
-					complete_expr(node, type_type_id);
+					assert(decl.type.id != 0);
+					complete_expr(node, Expr_Data{type_type_id, .Constant, decl.type.id});
 				}
 				case Proc_Decl: {
-					assert(decl_type.type != nil);
-					complete_expr(node, decl_type.type);
+					assert(decl.type != nil);
+					complete_expr(node, Expr_Data{decl.type, .RValue, {}});
 				}
 				case Var_Decl: {
-					assert(decl_type.type != nil);
-					complete_expr(node, decl_type.type);
+					assert(decl.type != nil);
+					complete_expr(node, Expr_Data{decl.type, .LValue, decl.var.expr_data.constant_value});
 				}
 				case: {
-					unhandledcase(decl_type);
+					unhandledcase(decl);
 				}
 			}
 
-			if kind.constant_value != nil {
-				node.constant_value = kind.constant_value;
+			// there are the same thing right? why is this constant propagation happening?
+			assert(&kind.expr_data.constant_value == &node.expr_data.constant_value);
+			if kind.expr_data.constant_value != nil {
+				node.expr_data.constant_value = kind.expr_data.constant_value;
 			}
 			return .Ok;
 		}
 
 		case Ast_Directive: {
+			// todo(josh): delet this
+
 			if kind.directive == "#odin" {
 				complete_node(node);
 				return .Ok;
@@ -502,8 +489,8 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Directive_Assert: {
-			value, ok := kind.condition.constant_value.(bool);
-			if kind.condition.expr_type != type_bool || !ok {
+			value, ok := kind.condition.expr_data.constant_value.(bool);
+			if kind.condition.expr_data.type != type_bool || !ok {
 				error(kind.condition, "#assert condition must be a constant boolean");
 				return .Error;
 			}
@@ -528,25 +515,25 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		case Ast_Var: {
 			declared_type: ^Type;
 			if kind.typespec != nil {
-				declared_type = get_type(ws, kind.typespec.base.constant_value.(TypeID));
+				declared_type = get_type(ws, kind.typespec.base.expr_data.constant_value.(TypeID));
 			}
 
 			true_type: ^Type;
 			if declared_type != nil {
 				if kind.expr != nil {
-					if !is_assignable_to(kind.expr.expr_type, declared_type) {
+					if !is_assignable_to(kind.expr.expr_data.type, declared_type) {
 						type_mismatch(declared_type, kind.expr);
 						return .Error;
 					}
-					convert_untyped_expression(kind.expr, declared_type);
+					convert_if_untyped(kind.expr, declared_type);
 				}
 				true_type = declared_type;
 			}
 			else if kind.expr != nil {
-				if is_untyped_type(kind.expr.expr_type) {
+				if is_untyped_type(kind.expr.expr_data.type) {
 					solidify_untyped_type(kind.expr);
 				}
-				true_type = kind.expr.expr_type;
+				true_type = kind.expr.expr_data.type;
 			}
 			else {
 				error(node, "Either a type or value is required for a variable declaration.");
@@ -561,7 +548,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			if kind.is_constant && true_type == type_type_id {
 				assert(kind.expr != nil);
 				node.do_not_print = true; // don't print type aliases
-				complete_declaration(kind.declaration, Type_Decl{get_type(ws, kind.expr.constant_value.(TypeID))});
+				complete_declaration(kind.declaration, Type_Decl{get_type(ws, kind.expr.expr_data.constant_value.(TypeID))});
 			}
 			else {
 				complete_declaration(kind.declaration, Var_Decl{true_type, kind});
@@ -569,12 +556,12 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 			if kind.is_constant {
 				assert(kind.expr != nil);
-				if kind.expr.constant_value == nil {
+				if kind.expr.expr_data.constant_value == nil {
 					error(node, "Constants require a constant value expression.");
 					return .Error;
 				}
-				node.constant_value = kind.expr.constant_value;
-				kind.declaration.constant_value = node.constant_value;
+				node.expr_data.constant_value = kind.expr.expr_data.constant_value;
+				kind.declaration.constant_value = node.expr_data.constant_value;
 			}
 
 			complete_node(node);
@@ -588,7 +575,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 
 		case Ast_Proc: {
 			if kind.return_typespec != nil {
-				kind.return_type = get_type(ws, kind.return_typespec.base.constant_value.(TypeID));
+				kind.return_type = get_type(ws, kind.return_typespec.base.expr_data.constant_value.(TypeID));
 			}
 
 			t := get_or_make_type_proc(ws, kind);
@@ -611,7 +598,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Typedef: {
-			t := make_type_distinct(ws, kind.name, get_type(ws, kind.other.base.constant_value.(TypeID)));
+			t := make_type_distinct(ws, kind.name, get_type(ws, kind.other.base.expr_data.constant_value.(TypeID)));
 			complete_node(node);
 			complete_declaration(kind.declaration, Type_Decl{t});
 			kind.declaration.constant_value = t.id;
@@ -619,7 +606,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Call: {
-			target_type := kind.procedure.expr_type;
+			target_type := kind.procedure.expr_data.type;
 			proc_type, ok := target_type.kind.(Type_Proc);
 			assert(ok);
 
@@ -631,14 +618,23 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			for _, idx in kind.args {
 				arg := kind.args[idx];
 				param := proc_type.params[idx];
-				if !is_assignable_to(arg.expr_type, param.inferred_type) {
+				if !is_assignable_to(arg.expr_data.type, param.inferred_type) {
 					type_mismatch(param.inferred_type, arg);
 					return .Error;
 				}
-				convert_untyped_expression(arg, param.inferred_type);
+				convert_if_untyped(arg, param.inferred_type);
 			}
 
-			complete_expr(node, proc_type.return_type, true);
+			mode: Addressing_Mode;
+			if proc_type.return_type == nil {
+				mode = .No_Value;
+			}
+			else {
+				mode = .RValue;
+			}
+			assert(mode != .Invalid);
+
+			complete_expr(node, Expr_Data{proc_type.return_type, mode, {}});
 			return .Ok;
 		}
 
@@ -719,52 +715,63 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 		}
 
 		case Ast_Paren: {
-			assert(kind.nested_expr.expr_type != nil);
-			node.constant_value = kind.nested_expr.constant_value;
-			complete_expr(node, kind.nested_expr.expr_type);
+			assert(kind.nested_expr.expr_data.type != nil);
+			node.expr_data.constant_value = kind.nested_expr.expr_data.constant_value;
+			complete_expr(node, kind.nested_expr.expr_data);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_If: {
-			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+			if !is_assignable_to(kind.condition.expr_data.type, type_bool) {
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
-			convert_untyped_expression(kind.condition, type_bool);
+			convert_if_untyped(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Else_If: {
-			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+			if !is_assignable_to(kind.condition.expr_data.type, type_bool) {
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
-			convert_untyped_expression(kind.condition, type_bool);
+			convert_if_untyped(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_While: {
-			if !is_assignable_to(kind.condition.expr_type, type_bool) {
+			if !is_assignable_to(kind.condition.expr_data.type, type_bool) {
 				type_mismatch(type_bool, kind.condition);
 				return .Error;
 			}
-			convert_untyped_expression(kind.condition, type_bool);
+			convert_if_untyped(kind.condition, type_bool);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Assign: {
-			assert(kind.left.expr_type != nil);
-			assert(kind.right.expr_type != nil);
-
-			if !is_assignable_to(kind.right.expr_type, kind.left.expr_type) {
-				type_mismatch(kind.left.expr_type, kind.right);
+			if kind.lhs.expr_data.mode != .LValue {
+				error(kind.lhs, "Cannot assign to non lvalue.");
 				return .Error;
 			}
-			convert_untyped_expression(kind.right, kind.left.expr_type);
+
+			if kind.rhs.expr_data.mode == .No_Value {
+				error(kind.lhs, "Rhs of assignment doesn't have a value.");
+				return .Error;
+			}
+			ltype := kind.lhs.expr_data.type;
+			rtype := kind.rhs.expr_data.type;
+			assert(ltype != nil);
+			assert(rtype != nil);
+
+			if !is_assignable_to(rtype, ltype) {
+				type_mismatch(ltype, kind.rhs);
+				return .Error;
+			}
+			convert_if_untyped(kind.rhs, ltype);
 			complete_node(node);
 			return .Ok;
 		}
@@ -773,19 +780,21 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 			assert(kind.procedure.signature_type != nil);
 			assert(kind.expr != nil);
 			return_type := kind.procedure.signature_type.kind.(Type_Proc).return_type;
-			expr_type := kind.expr.expr_type;
+			expr_type := kind.expr.expr_data.type;
 			if !is_assignable_to(expr_type, return_type) {
 				type_mismatch(return_type, kind.expr);
 				return .Error;
 			}
-			convert_untyped_expression(kind.expr, return_type);
+			convert_if_untyped(kind.expr, return_type);
 			complete_node(node);
 			return .Ok;
 		}
 
 		case Ast_Type_Expression: {
-			node.constant_value = kind.typespec.base.constant_value.(TypeID);
-			complete_expr(node, type_type_id);
+			unimplemented();
+			// todo(josh): expr shouldn't depend on typespec. the whole point of #type is that we don't _know_ that the following expression is necessarily a type
+			// node.constant_value = kind.typespec.base.constant_value.(TypeID);
+			// complete_expr(node, type_type_id);
 			return .Ok;
 		}
 
@@ -807,37 +816,37 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				}
 
 				case Typespec_List: {
-					list_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
+					list_of := get_type(ws, typespec_kind.typespec.base.expr_data.constant_value.(TypeID));
 					t := get_or_make_type_list_of(ws, list_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Array: {
-					if typespec_kind.length_expr.constant_value == nil {
+					if typespec_kind.length_expr.expr_data.constant_value == nil {
 						error(typespec_kind.length_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
-					array_length, ok := typespec_kind.length_expr.constant_value.(i64);
+					array_length, ok := typespec_kind.length_expr.expr_data.constant_value.(i64);
 					if !ok {
 						error(typespec_kind.length_expr, "Array sizes require a constant integer value.");
 						return .Error;
 					}
-					array_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
+					array_of := get_type(ws, typespec_kind.typespec.base.expr_data.constant_value.(TypeID));
 					t := get_or_make_type_array_of(ws, cast(u64)array_length, array_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Slice: {
-					slice_of := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
+					slice_of := get_type(ws, typespec_kind.typespec.base.expr_data.constant_value.(TypeID));
 					t := get_or_make_type_slice_of(ws, slice_of);
 					complete_typespec(kind, t);
 					return .Ok;
 				}
 
 				case Typespec_Ptr: {
-					ptr_to := get_type(ws, typespec_kind.typespec.base.constant_value.(TypeID));
+					ptr_to := get_type(ws, typespec_kind.typespec.base.expr_data.constant_value.(TypeID));
 					t := get_or_make_type_ptr_to(ws, ptr_to);
 					complete_typespec(kind, t);
 					return .Ok;
@@ -908,19 +917,22 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 	return .Error;
 }
 
-convert_untyped_expression :: proc(node: ^Ast_Node, target_type: ^Type) {
-	if node.constant_value == nil { // not sure about letting things get in here if they aren't untyped, maybe it's fine
+convert_if_untyped :: proc(node: ^Ast_Node, target_type: ^Type) {
+	if !is_untyped_type(node.expr_data.type) {
 		return;
 	}
 
 	switch kind in target_type.kind {
 		case Type_Untyped: {
-			convert_untyped_expression(node, kind.base);
+			//
+			convert_if_untyped(node, kind.base);
 			return;
 		}
 	}
 
-	switch kind in node.constant_value {
+	assert(node.expr_data.mode == .Constant);
+
+	switch kind in node.expr_data.constant_value {
 		case f64: {
 			switch target_kind in target_type.kind {
 				case Type_Float: {
@@ -931,44 +943,44 @@ convert_untyped_expression :: proc(node: ^Ast_Node, target_type: ^Type) {
 		}
 		case i64: {
 			switch target_kind in target_type.kind {
-				case Type_Float:   node.constant_value = cast(f64)kind;
+				case Type_Float:   node.expr_data.constant_value = cast(f64)kind;
 				case Type_Integer: assert(target_kind.signed == true, tprint("Should never lower a signed int to an unsigned int"));
 				case: panic(tprint(target_kind));
 			}
 		}
 		case u64: {
 			switch target_kind in target_type.kind {
-				case Type_Float:   node.constant_value = cast(f64)kind;
-				case Type_Integer: if target_kind.signed do node.constant_value = cast(i64)kind;
+				case Type_Float:   node.expr_data.constant_value = cast(f64)kind;
+				case Type_Integer: if target_kind.signed do node.expr_data.constant_value = cast(i64)kind;
 				case: panic(tprint(target_kind));
 			}
 		}
 		case: panic(tprint(kind));
 	}
-	node.expr_type = target_type;
+	node.expr_data.type = target_type;
 }
 
 solidify_untyped_type :: proc(node: ^Ast_Node) {
-	switch kind in node.expr_type.kind {
+	switch kind in node.expr_data.type.kind {
 		case Type_Untyped: {
 			switch untyped_kind in kind.base.kind {
 				case Type_Integer: {
-					node.expr_type = type_int;
+					node.expr_data.type = type_int;
 				}
 				case Type_Float: {
-					node.expr_type = type_int;
+					node.expr_data.type = type_int;
 				}
 				case: panic(tprint(untyped_kind));
 			}
 		}
-		case: panic(tprint("Expected untyped type, got:", node.expr_type));
+		case: panic(tprint("Expected untyped type, got:", node.expr_data.type));
 	}
 }
 
 
 
 type_mismatch :: proc(wanted: ^Type, given: ^Ast_Node, loc := #caller_location) {
-	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.expr_type));
+	error(given, "Type mismatch: wanted ", type_to_string(wanted), " given ", type_to_string(given.expr_data.type));
 }
 
 is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location) -> bool {
@@ -1151,7 +1163,7 @@ get_or_make_type_proc :: proc(using ws: ^Workspace, declaration: ^Ast_Proc) -> ^
 			if other_type.return_type != declaration.return_type do continue;
 
 			for _, idx in other_type.params {
-				this_param_type  := declaration.params[idx].base.expr_type;
+				this_param_type  := declaration.params[idx].base.expr_data.type;
 				other_param_type := other_type.params[idx].inferred_type;
 				if other_param_type != this_param_type {
 					continue type_loop;
@@ -1280,17 +1292,12 @@ complete_typespec :: inline proc(typespec: ^Ast_Typespec, t: ^Type, loc := #call
 	assert(typespec != nil);
 	assert(t != nil);
 	typespec.completed_type = t;
-	typespec.constant_value = t.id;
-	complete_expr(typespec.base, type_type_id);
+	complete_expr(typespec.base, Expr_Data{type_type_id, .Constant, t.id});
 }
 
-complete_expr :: inline proc(node: ^Ast_Node, t: ^Type, nil_type_is_ok := false, loc := #caller_location) {
+complete_expr :: inline proc(node: ^Ast_Node, expr_data: Expr_Data, loc := #caller_location) {
 	assert(node != nil, tprint("node was nil at ", loc));
-	if !nil_type_is_ok {
-		assert(t != nil, tprint("t was nil at ", loc));
-	}
-
-	node.expr_type = t;
+	node.expr_data = expr_data;
 	complete_node(node);
 }
 

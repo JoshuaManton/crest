@@ -127,8 +127,8 @@ Ast_Identifier :: struct {
 Ast_Assign :: struct {
 	using base: ^Ast_Node,
 	op: Operator,
-	left: ^Ast_Node,
-	right: ^Ast_Node,
+	lhs: ^Ast_Node,
+	rhs: ^Ast_Node,
 }
 
 Ast_If :: struct {
@@ -207,13 +207,13 @@ Ast_Sizeof :: struct {
 
 Ast_Subscript :: struct {
 	using base: ^Ast_Node,
-	left: ^Ast_Node,
+	lhs: ^Ast_Node,
 	index: ^Ast_Node,
 }
 
 Ast_Selector :: struct {
 	using base: ^Ast_Node,
-	left: ^Ast_Node,
+	lhs: ^Ast_Node,
 	field: string,
 }
 
@@ -281,8 +281,7 @@ Ast_Node :: struct {
 	root_token: Token,
 	check_state: Check_State,
 	depends: [dynamic]^Ast_Node,
-	expr_type: ^Type,
-	constant_value: Constant_Value,
+	expr_data: Expr_Data,
 	parent_procedure: ^Ast_Proc,
 	do_not_print: bool,
 }
@@ -301,7 +300,23 @@ Constant_Value :: union {
 	TypeID,
 }
 
-Pointer_To_Type :: ^Type;
+Expr_Data :: struct {
+	type: ^Type,
+	mode: Addressing_Mode,
+	constant_value: Constant_Value,
+}
+
+Addressing_Mode :: enum {
+	Invalid,
+	RValue,
+	LValue,
+	No_Value,
+	Constant,
+}
+
+
+
+Pointer_To_Type :: ^Type; // todo(josh): remove, this was for an odin bug a while back
 
 TypeID :: distinct int;
 

@@ -46,7 +46,7 @@ parse_stmt_list :: proc(ws: ^Workspace) {
 		if include, ok := stmt.derived.(Ast_Directive_Include); ok {
 			if ws.current_scope != ws.global_scope {
 				error(stmt, "`#include` is only allowed at global scope.");
-				assert(false); // todo(josh): error handling
+				assert(false); // todo(josh): @ErrorHandling
 			}
 			parse_file(ws, include.filename, ws.current_scope);
 		}
@@ -73,8 +73,7 @@ _alloc_node :: inline proc(ws: ^Workspace, token: Token, _derived: $T, loc := #c
 		token,
 		Check_State.Unchecked,
 		nil,
-		nil,
-		nil,
+		{},
 		currently_parsing_procedure,
 		false,
 	};
@@ -321,10 +320,13 @@ parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 			return sym.base;
 		}
 		case Directive_Type: {
-			typespec := parse_typespec(ws);
-			expr := node(ws, token, Ast_Type_Expression{{}, typespec});
-			depend(ws, expr, typespec);
-			return expr.base;
+			unimplemented();
+			// todo(josh): expr shouldn't depend on typespec. the whole point of #type is that we don't _know_ that the following expression is necessarily a type
+			// typespec := parse_typespec(ws);
+			// expr := node(ws, token, Ast_Type_Expression{{}, typespec});
+			// depend(ws, expr, typespec);
+			// return expr.base;
+			return nil;
 		}
 		case: {
 			unexpected_token(token, #location());
@@ -832,7 +834,7 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 			var.is_constant = true;
 			if var.expr == nil {
 				error(var.base, "Constants must be defined with an expression.");
-				assert(false); // todo(josh): error handling in parser code
+				assert(false); // todo(josh): ErrorHandling
 			}
 			return var.base;
 		}
@@ -864,51 +866,19 @@ parse_stmt :: proc(ws: ^Workspace) -> ^Ast_Node {
 		}
 		case: {
 			root_token := peek();
-			expr := parse_expr(ws);
-			switch kind in expr.derived {
-				case Ast_Call: {
-					expect(Semicolon);
-					return expr;
-				}
-				case Ast_Unary: {
-					if kind.op == .Dereference { // dereference assignment, ^var = 1;
-						stmt := parse_assign_stmt(ws, expr);
-						return stmt;
-					}
-					else {
-						println("Invalid unary expression at statement level.");
-						assert(false);
-					}
-				}
-				case Ast_Subscript, Ast_Selector, Ast_Identifier: {
-					stmt := parse_assign_stmt(ws, expr);
-					return stmt;
-				}
-				case: {
-					err := aprintln(expr, "is not a valid statement.");
-					assert(false, err);
-					return nil;
-				}
-			}
-
-			parse_assign_stmt :: proc(ws: ^Workspace, lhs: ^Ast_Node) -> ^Ast_Node {
-				if !is_assign_op() {
-					t := peek();
-					println("Syntax error: Expected assign operator, got", t.kind, "at", site(t.site));
-					assert(false);
-				}
-
+			stmt := parse_expr(ws);
+			if is_assign_op() {
+				lhs := stmt;
 				op_token := next_token();
 				rhs := parse_expr(ws);
 				op := op_token.operator;
-				stmt := node(ws, op_token, Ast_Assign{{}, op, lhs, rhs});
-				expect(Semicolon);
-
+				stmt = node(ws, op_token, Ast_Assign{{}, op, lhs, rhs});
 				depend(ws, stmt, lhs);
 				depend(ws, stmt, rhs);
-
-				return stmt.base;
 			}
+			assert(stmt != nil);
+			expect(Semicolon);
+			return stmt;
 		}
 	}
 

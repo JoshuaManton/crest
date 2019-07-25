@@ -184,7 +184,7 @@ emit_call :: proc(ast_call: ^Ast_Call, procedure: ^Ast_Proc, give_result: bool) 
 	if len(ast_call.args) > 0 {
 		output("# push parameters");
 		for arg in ast_call.args {
-			assert(arg.expr_type != nil);
+			assert(arg.expr_data.type != nil);
 			reg := emit_expr(arg, procedure);
 			push_register(reg);
 			free_register(procedure, reg);
@@ -203,7 +203,7 @@ emit_call :: proc(ast_call: ^Ast_Call, procedure: ^Ast_Proc, give_result: bool) 
 	//
 	result_reg: Register_Allocation;
 	has_result := false;
-	proc_type := ast_call.procedure.expr_type.kind.(Type_Proc);
+	proc_type := ast_call.procedure.expr_data.type.kind.(Type_Proc);
 	if proc_type.return_type != nil {
 		if give_result {
 			has_result = true;
@@ -299,7 +299,7 @@ pop_register :: proc(reg: Register_Allocation) {
 }
 
 emit_assign :: proc(ws: ^Workspace, assign: ^Ast_Assign, procedure: ^Ast_Proc) {
-	switch left_kind in &assign.left.derived {
+	switch left_kind in &assign.lhs.derived {
 		case Ast_Var: {
 			panic("");
 			result := emit_expr(left_kind.expr, procedure);
@@ -360,20 +360,20 @@ get_field_idx :: proc(type: ^Type_Struct, name: string) -> int {
 }
 
 emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation {
-	assert(!is_untyped_type(expr.expr_type), tprint(expr.derived));
-	if expr.constant_value != nil {
+	assert(!is_untyped_type(expr.expr_data.type), tprint(expr.derived));
+	if expr.expr_data.constant_value != nil {
 		reg: Register_Allocation;
-		switch kind in expr.constant_value {
+		switch kind in expr.expr_data.constant_value {
 			case i64: {
-				reg = alloc_register(procedure, expr.expr_type);
+				reg = alloc_register(procedure, expr.expr_data.type);
 				output("movsim", reg.reg, kind);
 			}
 			case u64: {
-				reg = alloc_register(procedure, expr.expr_type);
+				reg = alloc_register(procedure, expr.expr_data.type);
 				output("movuim", reg.reg, kind);
 			}
 			case f64: {
-				reg = alloc_register(procedure, expr.expr_type);
+				reg = alloc_register(procedure, expr.expr_data.type);
 				output("movfim", reg.reg, transmute(u64)kind);
 			}
 			case: panic(tprint(kind));
@@ -383,7 +383,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 
 	switch kind in &expr.derived {
 		case Ast_Number: {
-			switch number_kind in kind.base.constant_value {
+			switch number_kind in kind.base.expr_data.constant_value {
 				case i64: {
 					reg := alloc_register(procedure, type_i64);
 					output("movsim", reg.reg, number_kind);
@@ -415,8 +415,8 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 		}
 
 		case Ast_Binary: {
-			assert(kind.lhs.expr_type != nil);
-			assert(kind.rhs.expr_type != nil);
+			assert(kind.lhs.expr_data.type != nil);
+			assert(kind.rhs.expr_data.type != nil);
 			lhs_reg := emit_expr(kind.lhs, procedure);
 			rhs_reg := emit_expr(kind.rhs, procedure);
 			defer {
@@ -425,7 +425,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 			}
 			switch kind.op {
 				case .Plus: {
-					t := kind.lhs.expr_type;
+					t := kind.lhs.expr_data.type;
 					reg := alloc_register(procedure, t);
 					if is_integer_type(t) {
 						if is_signed_type(t) {
@@ -444,7 +444,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 					return reg;
 				}
 				case .Minus: {
-					t := kind.lhs.expr_type;
+					t := kind.lhs.expr_data.type;
 					reg := alloc_register(procedure, t);
 					if is_integer_type(t) {
 						if is_signed_type(t) {
@@ -463,7 +463,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 					return reg;
 				}
 				case .Multiply: {
-					t := kind.lhs.expr_type;
+					t := kind.lhs.expr_data.type;
 					reg := alloc_register(procedure, t);
 					if is_integer_type(t) {
 						if is_signed_type(t) {
@@ -482,7 +482,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 					return reg;
 				}
 				case .Divide: {
-					t := kind.lhs.expr_type;
+					t := kind.lhs.expr_data.type;
 					reg := alloc_register(procedure, t);
 					if is_integer_type(t) {
 						if is_signed_type(t) {
@@ -501,7 +501,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 					return reg;
 				}
 				case .Boolean_Equal: {
-					reg := alloc_register(procedure, kind.lhs.expr_type);
+					reg := alloc_register(procedure, kind.lhs.expr_data.type);
 					output("eq", reg.reg, lhs_reg.reg, rhs_reg.reg);
 					return reg;
 				}
@@ -512,7 +512,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 		case Ast_Unary: {
 			switch kind.op {
 				case .Minus: {
-					assert(is_signed_type(kind.rhs.expr_type));
+					assert(is_signed_type(kind.rhs.expr_data.type));
 					reg := emit_expr(kind.rhs, procedure);
 					output("neg", reg.reg);
 					return reg;
@@ -521,7 +521,7 @@ emit_expr :: proc(expr: ^Ast_Node, procedure: ^Ast_Proc) -> Register_Allocation 
 		}
 
 		case Ast_Call: {
-			proc_type, ok := kind.procedure.expr_type.kind.(Type_Proc);
+			proc_type, ok := kind.procedure.expr_data.type.kind.(Type_Proc);
 			assert(ok);
 			assert(proc_type.return_type != nil); // if we ended up in emit_expr() with a proc call then it should have a return value
 
