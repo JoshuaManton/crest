@@ -1,5 +1,5 @@
 proc main() i16 {
-	var x = foo();
+	// var x = foo();
 	return factorial(6);
 }
 

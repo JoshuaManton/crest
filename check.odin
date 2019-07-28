@@ -322,6 +322,7 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 					case: return false;
 				}
 			}
+
 			if !is_valid_rvalue(kind.lhs) {
 				error(kind.lhs, "Not a valid rvalue.");
 				println(kind.lhs);
@@ -530,6 +531,11 @@ typecheck_one_node :: proc(using ws: ^Workspace, node: ^Ast_Node) -> Check_Resul
 				true_type = declared_type;
 			}
 			else if kind.expr != nil {
+				if kind.expr.expr_data.mode == .No_Value {
+					error(kind.expr, "Rhs of assignment doesn't have a value.");
+					return .Error;
+				}
+
 				if is_untyped_type(kind.expr.expr_data.type) {
 					solidify_untyped_type(kind.expr);
 				}
@@ -1010,68 +1016,78 @@ is_assignable_to :: inline proc(rhs: ^Type, lhs: ^Type, loc := #caller_location)
 
 
 
-is_numeric_type :: proc(t: ^Type) -> bool {
+is_numeric_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Number > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_integer_type :: proc(t: ^Type) -> bool {
+is_integer_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Integer > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_float_type :: proc(t: ^Type) -> bool {
+is_float_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Float > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_signed_type :: proc(t: ^Type) -> bool {
+is_signed_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Signed > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_unsigned_type :: proc(t: ^Type) -> bool {
+is_unsigned_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Unsigned > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_untyped_type :: proc(t: ^Type) -> bool {
+is_untyped_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Untyped > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_pointer_type :: proc(t: ^Type) -> bool {
+is_pointer_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	if t.flags & cast(u32)Type_Flags.Pointer > 0 {
 		return true;
 	}
 	return false;
 }
 
-is_array_type :: proc(t: ^Type) -> bool {
+is_array_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	switch kind in t.kind {
 		case Type_Array: return true;
 	}
 	return false;
 }
-is_slice_type :: proc(t: ^Type) -> bool {
+is_slice_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	switch kind in t.kind {
 		case Type_Slice: return true;
 	}
 	return false;
 }
-is_list_type :: proc(t: ^Type) -> bool {
+is_list_type :: proc(t: ^Type, loc := #caller_location) -> bool {
+	assert(t != nil, tprint(loc));
 	switch kind in t.kind {
 		case Type_List: return true;
 	}
