@@ -8,6 +8,7 @@ using import "shared:workbench/logging"
 using import "../storm"
 
 VM_ALIGNMENT :: 8;
+vm_code: strings.Builder;
 
 generate_and_execute_workspace :: proc(ws: ^Workspace) {
 	// emit main
@@ -52,8 +53,6 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 	// println("vec.x is:", ws.vm.register_memory[vec_decl.kind.(Var_Decl).var.register.start]);
 	// println("vec.y is:", ws.vm.register_memory[vec_decl.kind.(Var_Decl).var.register.start+1]);
 }
-
-vm_code: strings.Builder;
 
 output :: proc(pieces: ..any) {
 	sbprintln(&vm_code, ..pieces);
