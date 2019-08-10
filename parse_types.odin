@@ -79,11 +79,6 @@ Ast_Proc :: struct {
 	variables: [dynamic]^Ast_Var,
 	output_name: string,
 
-	stack_frame_size: u64,
-	return_address_reg: Register_Allocation,
-	caller_frame_pointer_reg: Register_Allocation,
-	registers_in_use: [dynamic]Register_Allocation,
-
 	is_main: bool,
 }
 
@@ -98,9 +93,6 @@ Ast_Var :: struct {
 	is_constant: bool,
 	is_local: bool,
 	is_typedef: bool,
-
-	offset_in_stack_frame: u64,
-	// active_register: Maybe(Register_Allocation),
 }
 
 Ast_Struct :: struct {

@@ -2,52 +2,51 @@ package crest
 
 using import "core:fmt"
 
-IR_Entity :: struct {
-	scope: ^IR_Scope,
-	kind: union {
-		IR_Scope,
-		IR_Proc,
-		IR_Variable,
-	},
+using import "shared:workbench/logging"
+
+IR_Result :: struct {
+	global_vars: [dynamic]^IR_Var,
+	procedures: [dynamic]^IR_Proc,
+	entry_point: ^IR_Proc,
 }
 
 IR_Proc :: struct {
-	base: ^IR_Entity,
-	vars: [dynamic]^IR_Variable,
-	is_entry_point: bool,
+	params: [dynamic]^IR_Var,
+	vars: [dynamic]^IR_Var,
+	stmts: [dynamic]^IR_Stmt,
 }
 
-IR_Variable :: struct {
-	base: ^IR_Entity,
+IR_Var :: struct {
 	type: ^Type,
-	active_register: Register,
+	// storage: IR_Storage,
 }
+
+// IR_Storage :: union {
+// 	Stack_Storage,
+// 	Static_Storage,
+// }
+// Stack_Storage :: struct {
+// 	offset_in_frame: u64,
+// }
+// Static_Storage :: struct {
+// 	data_segment_index: int,
+// }
 
 IR_Scope :: struct {
-	base: ^IR_Entity,
 	parent: ^IR_Scope,
 	procedures: [dynamic]^IR_Proc,
 }
 
-IR_Assign :: struct {
-	result_register: int,
-}
-
-IR_Expression :: struct {
-	kind: union {
-		IR_Call,
-		IR_Binary,
-	},
-}
-
-IR_Call :: struct {
-
-}
+// IR_Call :: struct {
+// 	target_procedure: ^IR_Proc,
+// 	params: []^IR_Var,
+// }
 
 IR_Binary :: struct {
-	lhs: ^IR_Variable,
-	rhs: ^IR_Variable,
 	op: IR_Op,
+	result: ^IR_Var,
+	lhs: ^IR_Var,
+	rhs: ^IR_Var,
 }
 
 IR_Op :: enum {
@@ -60,105 +59,120 @@ IR_Op :: enum {
 	ModMod,
 }
 
+IR_Assign :: struct {
+	rhs: ^IR_Var,
+}
+
+IR_Stmt :: struct {
+	kind: union {
+		IR_Binary,
+	},
+}
+
 Register :: int;
 
-make_ir_entity :: proc(scope: ^IR_Scope, _kind: $T) -> ^T {
-	kind := _kind;
-	assert(kind.base == nil, "dont set base for a parameter to make_ir_entity");
-	e := new_clone(IR_Entity{scope, kind});
-	e.scope = scope;
-	k := &e.kind.(T);
-	k.base = e;
-	return k;
-}
-
-
+ir_result: ^IR_Result;
 
 ir_procedure :: proc() -> ^IR_Proc {
+	return new_clone(IR_Proc{});
+}
+
+ir_local_var :: proc(procedure: ^IR_Proc, type: ^Type) -> ^IR_Var {
+	var := new_clone(IR_Var{type});
+	append(&procedure.vars, var);
+	return var;
+}
+ir_proc_param :: proc(procedure: ^IR_Proc, type: ^Type) -> ^IR_Var {
+	var := new_clone(IR_Var{type});
+	append(&procedure.params, var);
+	return var;
+}
+ir_global_var :: proc(result: ^IR_Result, type: ^Type) -> ^IR_Var {
 	unimplemented();
 	return {};
 }
 
-ir_variable :: proc(type: ^Type) -> ^IR_Variable {
-	unimplemented();
-	return {};
+ir_stmt :: proc(procedure: ^IR_Proc, kind: $T) -> ^IR_Stmt {
+	stmt := new_clone(IR_Stmt{kind});
+	append(&procedure.stmts, stmt);
+	return stmt;
 }
 
-ir_add_proc_param :: proc(procedure: ^IR_Proc, variable: ^IR_Variable) {
-	unimplemented();
-}
-
-ir_assign :: proc(procedure: ^IR_Proc, destination: ^IR_Variable, expr: ^IR_Entity) {
+ir_assign :: proc(procedure: ^IR_Proc, destination: ^IR_Var, rhs: ^IR_Var) {
 	unimplemented();
 }
 
-ir_call :: proc(procedure: ^IR_Proc, call: ^IR_Call) -> ^IR_Variable {
+// ir_call :: proc(parent_procedure: ^IR_Proc, target_procedure: ^IR_Proc, params: [dynamic]^IR_Expr) -> ^IR_Call {
+// 	assert(len(params) == len(target_procedure.params));
+// 	param_vars: [dynamic]^IR_Var;
+// 	for p, idx in params {
+// 		assert(p.type == target_procedure.params[idx].type);
+// 		v := ir_decompose_expr_into_temporaries(parent_procedure, p);
+// 		append(&param_vars, v);
+// 	}
+// 	return new_clone(IR_Call{target_procedure, param_vars[:]});
+// }
+
+ir_binop :: proc(procedure: ^IR_Proc, op: IR_Op, lhs, rhs: ^IR_Var) -> ^IR_Var {
+	assert(lhs.type == rhs.type);
+	result := ir_local_var(procedure, lhs.type);
+	ir_stmt(procedure, IR_Binary{op, result, lhs, rhs});
+	return result;
+}
+
+ir_return :: proc(procedure: ^IR_Proc, res: ^IR_Var) {
 	unimplemented();
-	return {};
 }
 
-ir_binop :: proc(procedure: ^IR_Proc, binary: ^IR_Binary) -> ^IR_Variable {
-	lhs := ir_emit_expr(procedure, binary.lhs);
-	rhs := ir_emit_expr(procedure, binary.rhs);
-	#complete
-	switch binary.op {
-		case .Add:      unimplemented();
-		case .Minus:    unimplemented();
-		case .Multiply: unimplemented();
-		case .Divide:   unimplemented();
-		case .Mod:      unimplemented();
-		case .ModMod:   unimplemented();
-		case .None:     assert(false);
+test_ir :: proc(ws: ^Workspace) {
+	ir_result = new(IR_Result);
 
-	}
-	unreachable();
-	return {};
-}
-
-test :: proc() {
 	procedure := ir_procedure();
-	px := ir_variable(type_int);
-	py := ir_variable(type_int);
-	ir_add_proc_param(procedure, px);
-	ir_add_proc_param(procedure, py);
+	a := ir_proc_param(procedure, type_int);
+	b := ir_proc_param(procedure, type_int);
+	c := ir_binop(procedure, .Add, a, b);
+	d := ir_binop(procedure, .Add, ir_binop(procedure, .Minus, a, b), ir_binop(procedure, .Add, a, b));
 
-	ir_assign(procedure, px, ir_binop(procedure, ir_bin.Add, px, py).base);
-	ir_return(procedure, temp);
+	for stmt in procedure.stmts {
+		logln(stmt);
+	}
+
+	// ir_assign(procedure, c, ir_binop(procedure, .Add, ir_expr(IR_Var_Expr{a}, a.type), ir_expr(IR_Var_Expr{b}, b.type)));
+	// ir_return(procedure, c);
+
+	ir_analyze(ir_result);
+	emit_ir_result(ir_result);
 }
 
+ir_analyze :: proc(using result: ^IR_Result) {
+	// figure out stack offsets for all variables
+	for procedure in procedures {
+		for param in procedure.params {
 
+		}
 
+		for var in procedure.vars {
 
-
-
-
-
-
-ir_emit_expr :: proc(procedure: ^IR_Proc, expr: ^IR_Expression) -> ^IR_Variable {
-	#complete
-	switch kind in &expr.kind {
-		case IR_Call:   return ir_emit_call(procedure, kind);
-		case IR_Binary: return ir_emit_binop(procedure, kind);
-		case: panic(tprint(kind));
+		}
 	}
-	unreachable();
-	return {};
+
+	// allocate room in static storage for global variables
+	for global in global_vars {
+
+	}
 }
 
-ir_emit_binop :: proc(procedure: ^IR_Proc, binary: ^IR_Binary) -> ^IR_Variable {
-	lhs := ir_emit_expr(procedure, binary.lhs);
-	rhs := ir_emit_expr(procedure, binary.rhs);
-	#complete
-	switch binary.op {
-		case .Add:      unimplemented();
-		case .Minus:    unimplemented();
-		case .Multiply: unimplemented();
-		case .Divide:   unimplemented();
-		case .Mod:      unimplemented();
-		case .ModMod:   unimplemented();
-		case .None: assert(false);
-
+emit_ir_result :: proc(using result: ^IR_Result) {
+	for procedure in procedures {
+		emit_ir_procedure(procedure);
 	}
-	unreachable();
-	return {};
+}
+
+emit_ir_procedure :: proc(procedure: ^IR_Proc) {
+
+}
+
+Register_Allocation :: struct {
+	reg: Register,
+	type: ^Type,
 }

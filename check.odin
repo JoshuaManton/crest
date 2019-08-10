@@ -43,7 +43,7 @@ type_type_id: ^Type;
 
 constant_precedence_table: map[^Type]int;
 
-init_builtin_types :: proc(using ws: ^Workspace) {
+init_builtin_types :: proc(using ws: ^Workspace, create_declarations: bool) {
 	if type_i8 == nil {
 		type_i8   = make_type(ws, "i8",   1, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
 		type_i16  = make_type(ws, "i16",  2, Type_Integer{true},  Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
@@ -61,34 +61,21 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		type_uint  = type_u32;
 		type_float = type_f32;
 
-		// todo(josh)
-		// type_rawptr = make_type(ws, POINTER_SIZE, Type_Primitive{"rawptr"}, Type_Flags.Pointer);
-
-		create_declaration(ws.global_scope, "i8",      type_i8);
-		create_declaration(ws.global_scope, "i16",     type_i16);
-		create_declaration(ws.global_scope, "i32",     type_i32);
-		create_declaration(ws.global_scope, "i64",     type_i64);
-		create_declaration(ws.global_scope, "int",     type_i32);
-		create_declaration(ws.global_scope, "u8",      type_u8);
-		create_declaration(ws.global_scope, "u16",     type_u16);
-		create_declaration(ws.global_scope, "u32",     type_u32);
-		create_declaration(ws.global_scope, "u64",     type_u64);
-		create_declaration(ws.global_scope, "uint",    type_u32);
-		create_declaration(ws.global_scope, "f32",     type_f32);
-		create_declaration(ws.global_scope, "f64",     type_f64);
-		create_declaration(ws.global_scope, "float",   type_f32);
-		create_declaration(ws.global_scope, "bool",    type_bool);
-
-		// todo(josh)
-		// create_declaration(ws.global_scope, "rawptr",  type_rawptr);
-
-
-
 		string_fields := [?]Field {
 			{"data",   get_or_make_type_ptr_to(ws, type_u8)},
 			{"length", type_int},
 		};
-		type_string = make_type_struct(ws, "string", string_fields[:]); create_declaration(ws.global_scope, "string", type_string);
+		type_string = make_type_struct(ws, "string", string_fields[:]);
+
+		// todo:(josh): currently operators are preserved when making a distinct type, so adding two type_ids together will not error as it should
+		type_type_id = make_type_distinct(ws, "type_id", type_int);
+
+		type_untyped_int   = make_type(ws, "untyped_int",   0, Type_Untyped{type_int},   Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
+		type_untyped_uint  = make_type(ws, "untyped_uint",  0, Type_Untyped{type_uint},  Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
+		type_untyped_float = make_type(ws, "untyped_float", 0, Type_Untyped{type_float}, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+
+		// todo(josh)
+		// type_rawptr = make_type(ws, POINTER_SIZE, Type_Primitive{"rawptr"}, Type_Flags.Pointer);
 
 		// slice_fields := [?]Field{
 		// 	{"data",   get_or_make_type_ptr_to(ws, type_u8)},
@@ -102,12 +89,31 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 		// };
 		// type_dynamic_array = make_type_struct(ws, "dynamic array", dynamic_array_fields[:]);
 
-		// todo:(josh): currently operators are preserved when making a distinct type, so adding two type_ids together will not error as it should
-		type_type_id = make_type_distinct(ws, "type_id", type_int); create_declaration(ws.global_scope, "type_id", type_type_id);
+		if create_declarations { // todo(josh): this was just for testing IR, remove when done or factor to somewhere else
+			create_declaration(ws.global_scope, "i8",      type_i8);
+			create_declaration(ws.global_scope, "i16",     type_i16);
+			create_declaration(ws.global_scope, "i32",     type_i32);
+			create_declaration(ws.global_scope, "i64",     type_i64);
+			create_declaration(ws.global_scope, "int",     type_i32);
+			create_declaration(ws.global_scope, "u8",      type_u8);
+			create_declaration(ws.global_scope, "u16",     type_u16);
+			create_declaration(ws.global_scope, "u32",     type_u32);
+			create_declaration(ws.global_scope, "u64",     type_u64);
+			create_declaration(ws.global_scope, "uint",    type_u32);
+			create_declaration(ws.global_scope, "f32",     type_f32);
+			create_declaration(ws.global_scope, "f64",     type_f64);
+			create_declaration(ws.global_scope, "float",   type_f32);
+			create_declaration(ws.global_scope, "bool",    type_bool);
 
-		type_untyped_int   = make_type(ws, "untyped_int",   0, Type_Untyped{type_int},   Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Signed);
-		type_untyped_uint  = make_type(ws, "untyped_uint",  0, Type_Untyped{type_uint},  Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Integer | Type_Flags.Unsigned);
-		type_untyped_float = make_type(ws, "untyped_float", 0, Type_Untyped{type_float}, Type_Flags.Untyped | Type_Flags.Number | Type_Flags.Float   | Type_Flags.Signed);
+			create_declaration(ws.global_scope, "type_id", type_type_id);
+
+			create_declaration(ws.global_scope, "string", type_string);
+
+			// todo(josh)
+			// create_declaration(ws.global_scope, "rawptr",  type_rawptr);
+		}
+
+
 
 		constant_precedence_table[type_untyped_float] = 3;
 		constant_precedence_table[type_untyped_int]   = 2;
@@ -183,8 +189,6 @@ init_builtin_types :: proc(using ws: ^Workspace) {
 
 typecheck_workspace :: proc(ws: ^Workspace) -> bool {
 	using Check_State;
-
-	init_builtin_types(ws);
 
 	if !resolve_identifiers(ws) {
 		return false;

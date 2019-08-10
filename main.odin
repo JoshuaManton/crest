@@ -6,25 +6,32 @@ using import "core:fmt"
 using import "../storm"
 using import "shared:workbench/logging"
 
+TESTING_IR :: true;
+
 main :: proc() {
-	workspace: Workspace;
+	ws: Workspace;
 
-	parse_ok := parse_file(&workspace, os.args[1]);
-	if !parse_ok {
-		println("There were errors, exiting.");
-		return;
+	when TESTING_IR {
+		init_builtin_types(&ws, false);
+		test_ir(&ws);
 	}
+	else {
+		init_builtin_types(&ws, true);
+		parse_ok := parse_file(&workspace, os.args[1]);
+		if !parse_ok {
+			println("There were errors, exiting.");
+			return;
+		}
 
-	check_ok := typecheck_workspace(&workspace);
-	if !check_ok {
-		println("There were errors, exiting.");
-		return;
+		check_ok := typecheck_workspace(&workspace);
+		if !check_ok {
+			println("There were errors, exiting.");
+			return;
+		}
 	}
-
-
 
 	// gen_odin(&workspace);
-	generate_and_execute_workspace(&workspace);
+	// generate_and_execute_workspace(&workspace);
 }
 
 Workspace :: struct {
@@ -36,8 +43,5 @@ Workspace :: struct {
 	all_types: [dynamic]^Type,
 	all_procedures: [dynamic]^Ast_Proc,
 	all_global_variables: [dynamic]^Ast_Var,
-
-	// ir_procedures: [dynamic]^IR_Procedure,
-	// ir_global_fields: [dynamic]^IR_Field,
 }
 

@@ -1,12 +1,15 @@
 package crest
 
-IR_Result :: struct {
-	global_scope: ^IR_Scope,
-	entry_point: ^IR_Proc,
+IR_Program :: struct {
+	procedures: []IR_Proc,
+	global_variables: []IR_Var,
 }
 
-generate_ir_for_workspace :: proc(ws: ^Workspace) -> IR_Result {
+generate_vm_from_ir :: proc(program: ^IR_Program) {
 
+}
+/*
+generate_ir_for_workspace :: proc(ws: ^Workspace) -> IR_Result {
 	global_scope := make_ir_entity(nil, IR_Scope{nil, nil, nil});
 
 	main_proc: ^Ast_Proc;
@@ -20,3 +23,4 @@ generate_ir_for_workspace :: proc(ws: ^Workspace) -> IR_Result {
 	}
 	return IR_Result{global_scope, nil};
 }
+*/

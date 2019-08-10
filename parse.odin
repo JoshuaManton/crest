@@ -1,6 +1,7 @@
 package crest
 
 using import "core:fmt"
+      import "core:strconv"
       import rt "core:runtime"
 	  import "core:os"
 
@@ -272,8 +273,6 @@ parse_typespec :: proc(ws: ^Workspace) -> ^Ast_Typespec {
 	depend(ws, ptr, typespec);
 	return ptr;
 }
-
-import "core:strconv"
 
 parse_operand :: proc(ws: ^Workspace) -> ^Ast_Node {
 	using Token_Type;
@@ -547,7 +546,7 @@ parse_var_decl :: proc(ws: ^Workspace, require_var := true) -> ^Ast_Var {
 		}
 	}
 
-	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, nil, false, is_local, false, 0});
+	var := node(ws, root_token, Ast_Var{{}, name, typespec, value, decl, nil, false, is_local, false});
 	if typespec != nil {
 		depend(ws, var, typespec);
 	}
@@ -575,21 +574,9 @@ try_parse_directive :: proc(ws: ^Workspace) -> ^Ast_Directive {
 
 currently_parsing_procedure: ^Ast_Proc;
 
-PROC_IS_ODIN_PROC : u32 : 1 << 0;
 
 try_parse_proc_directives :: proc(ws: ^Workspace, node: ^Ast_Node) -> u32 {
 	flags: u32;
-	for true {
-		directive := try_parse_directive(ws);
-		if directive == nil do break;
-		switch directive.directive {
-			case "#odin": {
-				flags |= PROC_IS_ODIN_PROC;
-				node.do_not_print = true;
-			}
-		}
-	}
-
 	return flags;
 }
 

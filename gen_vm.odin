@@ -7,6 +7,7 @@ using import "core:mem"
 using import "shared:workbench/logging"
 using import "../storm"
 
+/*
 VM_ALIGNMENT :: 8;
 vm_code: strings.Builder;
 
@@ -23,7 +24,7 @@ generate_and_execute_workspace :: proc(ws: ^Workspace) {
 		emit_procedure(ws, procedure);
 	}
 
-	println(strings.to_string(vm_code));
+	// println(strings.to_string(vm_code));
 
 	vm: VM;
 	parse_and_execute(strings.to_string(vm_code), &vm);
@@ -690,11 +691,6 @@ mov_reg_to_var :: proc(reg: Register_Allocation, var: ^Ast_Var, procedure: ^Ast_
 // 	mov(&ws.vm, rip, procedure.return_address_register.start);
 // }
 
-Register_Allocation :: struct {
-	reg: Register,
-	type: ^Type,
-}
-
 alloc_register :: proc(procedure: ^Ast_Proc, type: ^Type, loc := #caller_location) -> Register_Allocation {
 	assert(procedure != nil);
 	for r in Register.r1..Register.r10 {
@@ -740,3 +736,4 @@ array_contains :: proc(array: $T/[]$E, val: E) -> bool {
 	}
 	return false;
 }
+*/
